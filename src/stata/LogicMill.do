@@ -7,8 +7,7 @@ python:
 import requests
 import json
 import pandas as pd
-API_KEY = <FILL YOUR API KEY HERE>'
-
+API_KEY = '<FILL YOUR API KEY HERE>'
 
 URL = 'https://api.logic-mill.net/api/v1/graphql/'
 
