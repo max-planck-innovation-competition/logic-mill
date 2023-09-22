@@ -11,9 +11,9 @@ This repository contains public documentation, and code examples for the use of 
 # Waiting list
 
 > Logic Mill is still in beta and we are still finishing things for public access.
-> 
+>
 You can sign up for the Logic Mill waiting list: https://logic-mill.net/waiting-list.
-Signing up for the waiting list does not automatically give you access to the system. 
+Signing up for the waiting list does not automatically give you access to the system.
 
 # API key
 In order to use the Logic Mill endpoint you need an API key. Check your profile (top right) once you are logged in and copy the key into your code.
@@ -23,7 +23,6 @@ In order to use the Logic Mill endpoint you need an API key. Check your profile 
 In the /src directory you will find examples on how to use the Logic Mill API in several languages. We have examples in:
 
 - [Go](src/go/)
-- [Javascript](src/javascript/)
 - [Python](src/python/)
   - `basic-api-usage.ipynb`: basic Python examples
   - `automatic_parsing.py`: automatically flattens the response to dataframe. This code has not been thoroughly tested yet.
