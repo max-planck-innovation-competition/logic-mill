@@ -1,0 +1,517 @@
+---
+title: "Logic Mill API"
+author: "Erik Buunk"
+date: "2022-09-21"
+output:
+  html_document:
+    df_print: paged
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+API_KEY <- paste('Bearer', '<FILL YOUR API KEY HERE')
+```
+
+# Basic Logic Mill API Usage
+
+Based on: <https://www.dataquest.io/blog/r-api-tutorial/>
+
+Documentation for the Logic Mill API: <https://api.logic-mill.net/api/v1/graph>
+
+```{r message=FALSE, include=FALSE}
+# install.packages(c("httr", "jsonlite", "ghql", "dplyr"))
+```
+
+```{r echo=TRUE, message=FALSE}
+library(httr)
+library(jsonlite)
+library(ghql)
+library(dplyr)
+URL = 'https://api.logic-mill.net/api/v1/graphql/'
+```
+
+## Get the version
+
+This simple request will get the current version of the API and is also an easy way to check if the server is running and the requests are constructed the correct way.
+
+```{r}
+# use single quotes
+query <- '{
+  Version
+}'
+body = list(query = query)
+
+res = POST(URL, query = body, headers=headers)
+
+print(res)
+```
+
+```{r}
+# Get data and some error handling
+if (res$status_code == 200) {
+    data = fromJSON(rawToChar(res$content))$data
+    print(data$Version)
+} else {
+    print("An error has occured")
+}
+
+```
+
+## Get the names of document sets (indices)
+
+<https://api.logic-mill.net/api/v1/graph/?query=%7B%0A%20%20IndicesNames%20%7B%0A%20%20%20%20amountOfDocuments%0A%20%20%20%20name%0A%20%20%7D%0A%7D>
+
+```{r}
+query = '{
+  IndicesNames {
+    amountOfDocuments
+    name
+  }
+}'
+body = list(query = query)
+res = POST(URL, query = body, headers=headers)
+data = fromJSON(rawToChar(res$content))$data
+
+```
+
+The list of all the available indices
+
+```{r}
+indices <- data$IndicesNames$name
+indices
+```
+
+## Getting basic document information
+
+By supplying an ID
+
+### Simple version
+
+```{r}
+variables <-  fromJSON('{
+  "id": "123fa2d18fab2ae1752451405f0eac5e273f2695",
+  "index": "semanticscholar_cos"
+}')
+
+
+conn <- GraphqlClient$new(
+  url = URL,
+  headers = list(Authorization = API_KEY)
+)
+query = 'query Document($index: String!, $id: String!) {
+  Document(index: $index, id: $id) {
+    id
+    documentParts {
+      title
+    }
+    metadata {
+      createdAt
+      aliases
+    }
+    vector
+  }
+}
+'
+
+new <- Query$new()$query('link', query)
+
+res = conn$exec(new$link, variables = variables) %>%
+    fromJSON(flatten = F)
+
+print(res$data$Document$documentParts)
+print(res$data$Document$id)
+print(res$data$Document$metadata)
+```
+
+### Parameter version
+
+For the version with Parameters we will use the `ghql` library.
+
+Based on the following website: <https://ropensci.org/blog/2020/12/08/accessing-graphql-in-r/>
+
+```{r}
+
+# create new query
+query <-  'query ($id:String!, $index:String!) {
+	Document(index:$index, id:$id) {
+	  id
+    documentParts {
+      title
+    }
+    metadata {
+      magId
+      venue
+      year
+    }
+	}
+}'
+
+new <- Query$new()$query('link', query)
+
+variables = list(id = "123fa2d18fab2ae1752451405f0eac5e273f2695",
+                 index ="semanticscholar_cos")
+
+res = conn$exec(new$link, variables = variables) %>%
+    fromJSON(flatten = F)
+
+
+
+```
+
+After this we can do the same thing:
+
+```{r}
+print(res$data$Document$id)
+print(res$data$Document$documentParts)
+```
+
+Or use `dyplr` to prettify the output
+
+```{r}
+docInfo <- res$data$Document$documentParts %>%
+    as_tibble()
+docInfo
+```
+
+## Get the numerical representation/embedding of document in database
+
+The query is the same as above, only different fields are requested
+
+```{r}
+
+# create new query
+query <-  'query ($id:String!, $index:String!) {
+	Document(index:$index, id:$id) {
+    id
+    vector
+	}
+}'
+
+new <- Query$new()$query('link', query)
+
+variables = list(id = "123fa2d18fab2ae1752451405f0eac5e273f2695",
+                 index ="semanticscholar_cos")
+
+res = conn$exec(new$link, variables = variables) %>%
+    fromJSON(flatten = F)
+
+res$data$Document$vector %>% as_tibble()
+```
+
+## Search *n* most similar documents compared to a document in the database
+
+```{r}
+# create new query
+query <-  'query ($id:String!, $index:String!, $amount:Int) {
+  SimilaritySearch(index:$index, id:$id, amount:$amount) {
+       id
+    score
+    document {
+      documentParts {
+        title
+
+      }
+    }
+  }
+}'
+
+new <- Query$new()$query('link', query)
+
+variables = list(id = "123fa2d18fab2ae1752451405f0eac5e273f2695",
+                 index ="semanticscholar_cos",
+                 amount = 5)
+
+res = conn$exec(new$link, variables = variables) %>%
+    fromJSON(flatten = F)
+
+res$data$SimilaritySearch$document$documentParts
+
+```
+
+```{r}
+similar_docs <-  res$data$SimilaritySearch$document$documentParts
+similar_docs <-  cbind(similar_docs, id = res$data$SimilaritySearch$id, score = res$data$SimilaritySearch$score)
+
+similar_docs
+
+```
+
+## Create a new embedding for a user document
+
+We use the `embedDocument` endpoint. This query expects an `LmDocumentMutationObject`. This object look like this
+
+    id: String!
+    parts: [LmDocumentPartsMutationObject]
+
+`LmDocumentPartsMutationObject` is a key/value pair for every field (title and abstract)
+
+The `id` is for identification purposes and can be any number.
+
+Many time we may have the data available in some datastructure (CSV, Excel file, dictionary). In the following example we will use a dictionary.
+
+```{r}
+# our data
+id <- c("ML001", "ML002", "ML003" )
+title <- c('Towards A Rigorous Science of Interpretable Machine Learning',
+           'Machine Learning Interpretability: A Science rather than a tool',
+           'Opening the black box of neural networks: methods for interpreting neural network models in clinical applications'
+    )
+abstract <- c('As machine learning systems become ubiquitous, there has been a surge of interest in interpretable machine learning: systems that provide explanation for their outputs. These explanations are often used to qualitatively assess other criteria such as safety or non-discrimination. However, despite the interest in interpretability, there is very little consensus on what interpretable machine learning is and how it should be measured. In this position paper, we first define interpretability and describe when interpretability is needed (and when it is not). Next, we suggest a taxonomy for rigorous evaluation and expose open questions towards a more rigorous science of interpretable machine learning.',
+              'The term "interpretability" is oftenly used by machine learning researchers each with their own intuitive understanding of it. There is no universal well agreed upon definition of interpretability in machine learning. As any type of science discipline is mainly driven by the set of formulated questions rather than by different tools in that discipline, e.g. astrophysics is the discipline that learns the composition of stars, not as the discipline that use the spectroscopes. Similarly, we propose that machine learning interpretability should be a discipline that answers specific questions related to interpretability. These questions can be of statistical, causal and counterfactual nature. Therefore, there is a need to look into the interpretability problem of machine learning in the context of questions that need to be addressed rather than different tools. We discuss about a hypothetical interpretability framework driven by a question based scientific approach rather than some specific machine learning model. Using a question based notion of interpretability, we can step towards understanding the science of machine learning rather than its engineering. This notion will also help us understanding any specific problem more in depth rather than relying solely on machine learning methods',
+    "Artificial neural networks (ANNs) are powerful tools for data analysis and are particularly suitable for modeling relationships between variables for best prediction of an outcome. While these models can be used to answer many important research questions, their utility has been critically limited because the interpretation of the \"black box\" model is difficult. Clinical investigators usually employ ANN models to predict the clinical outcomes or to make a diagnosis; the model however is difficult to interpret for clinicians. To address this important shortcoming of neural network modeling methods, we describe several methods to help subject-matter audiences (e.g., clinicians, medical policy makers) understand neural network models. Garson's algorithm describes the relative magnitude of the importance of a descriptor (predictor) in its connection with outcome variables by dissecting the model weights. The Lek's profile method explores the relationship of the outcome variable and a predictor of interest, while holding other predictors at constant values (e.g., minimum, 20th quartile, maximum). While Lek's profile was developed specifically for neural networks, partial dependence plot is a more generic version that visualize the relationship between an outcome and one or two predictors. Finally, the local interpretable model-agnostic explanations (LIME) method can show the predictions of any classification or regression, by approximating it locally with an interpretable model. R code for the implementations of these methods is shown by using example data fitted with a standard, feed-forward neural network model. We offer codes and step-by-step description on how to use these tools to facilitate better understanding of ANN")
+
+biblios = data.frame(id, title, abstract)
+biblios
+```
+
+#
+
+```{r}
+# first item
+biblio = biblios[1,]
+
+data = list(id=biblio$id)
+
+parts = list()
+# prepare the data
+for (col in colnames(biblio)){
+    if (col!= 'id') {
+        record = data.frame(key=col, value=biblio[,c(col)])
+        parts = rbind(parts, record)
+    }
+
+}
+
+data$parts <-  parts
+
+variables <-  list(data=data)
+variables
+```
+
+```{r}
+
+query = 'query encodeDocument($data: EncodeObject) {
+  encodeDocument(data: $data)
+}'
+
+new <- Query$new()$query('link', query)
+
+res = conn$exec(new$link, variables = variables) %>%
+    fromJSON(flatten = F)
+
+res$data$encodeDocument %>% as_tibble()
+```
+
+```{r}
+URL <- 'https://api.logic-mill.net/api/v1/graphql/'
+variables <-  fromJSON('{"data":{"id":"ID","parts":[{"key":"title","value":"Airbags"},{"key":"abstract","value":"Airbags are one of the most important safety gears in motor vehicles such as cars and SUVs. These are cushions built into a vehicle that are intended to inflate in case of a car accident in order to protect occupants from injuries by preventing them from striking the interior of vehicle during a crash."}]}}')
+
+
+
+query = 'query encodeDocument($data: EncodeObject) {
+  encodeDocument(data: $data)
+}'
+
+new <- Query$new()$query('link', query)
+
+res = conn$exec(new$link, variables = variables) %>%
+    fromJSON(flatten = F)
+
+res$data$encodeDocument %>% as_tibble()
+```
+
+## Create embeddings for multiple documents
+
+```{r}
+query = 'query encodeDocument($data: EncodeObject) {
+  encodeDocument(data: $data)
+}'
+new <- Query$new()$query('link', query)
+
+df <- data.frame()
+
+for (i in 1:length(biblios)){
+    biblio <-  biblios[i,]
+    data <-  list(id=biblio$id)
+    data$parts <-  list()
+    for (col in colnames(biblio)){
+        if (col!= 'id') {
+            record <-  data.frame(key=col, value=biblio[,c(col)])
+            data$parts <-  rbind(parts, record)
+        }
+
+    }
+
+    variables <-  list(data=data)
+
+    res <-  conn$exec(new$link, variables = variables) %>%
+        fromJSON(flatten = F)
+
+    row <- data.frame(id=biblio$id)
+    row <- cbind(row, data.frame(t(res$data$encodeDocument)))
+    df <- rbind(df, row)
+
+    }
+
+df[,1:5 ]
+
+
+
+
+
+```
+
+## Find similarity between user supplied documents
+
+```{r}
+query <- 'query encodeDocumentAndSimilarityCalculation($data: [EncodeObject]) {
+  encodeDocumentAndSimilarityCalculation(data: $data, similarityMetric: cosine) {
+    similarities
+    xs {
+      id
+    }
+    ys {
+      id
+    }
+  }
+}'
+new <- Query$new()$query('link', query)
+
+```
+
+```{r}
+
+variables = NULL
+data = NULL
+for( i in 1:nrow(biblios)) {
+    biblio = biblios[i,]
+
+    biblio
+    record = NULL
+    key_values = NULL
+    for (k in colnames(biblio)){
+        if (k!="id") {
+            v = biblio[[k]]
+            key_values = rbind(key_values, data.frame(key=k, value = v))
+        }
+    }
+
+    record = list(id=biblio$id)
+    record[["parts"]]= key_values
+
+    data = rbind(data, record)
+}
+
+rownames(data)=1:nrow(data)
+variables = list(data=data.frame(data), metric='cosine')
+
+```
+
+```{r}
+res <-  conn$exec(new$link, variables = variables) %>%
+     fromJSON(flatten = F)
+
+df = data.frame(res$data$encodeDocumentAndSimilarityCalculation$similarities)
+
+colnames(df) <- t(res$data$encodeDocumentAndSimilarityCalculation$xs)
+rownames(df) <- t(res$data$encodeDocumentAndSimilarityCalculation$ys)
+df
+
+```
+
+## Find n similar documents
+
+```{r}
+query = 'query embedDocumentAndSimilaritySearch($data: [EncodeDocumentPart], $indices: [String], $amount: Int) {
+  encodeDocumentAndSimilaritySearch(
+    data: $data
+    indices: $indices
+    amount: $amount
+  ) {
+    document {
+      documentParts {
+        title
+      }
+    }
+    id
+    score
+    index
+  }
+}
+'
+
+new <- Query$new()$query('link', query)
+
+
+    # prepare data
+    biblio = biblios[3,] # third record
+    variables = list(indices=indices, amount=3)
+    parts = list()
+
+    for (col in colnames(biblio)){
+        if (col!= 'id') {
+            record = data.frame(key=col, value=biblio[,c(col)])
+            parts = rbind(parts, record)
+        }
+
+    }
+
+    variables$data <-  parts
+
+    res <-  conn$exec(new$link, variables = variables) %>%
+         fromJSON(flatten = F)
+
+
+
+    # combine the data into a single dataframe
+    results = res$data$encodeDocumentAndSimilaritySearch[c("index","score")]
+    info = res$data$encodeDocumentAndSimilaritySearch$document$documentParts
+    results = cbind(results, info)
+    results
+    ```
+
+### With JSON
+```{r}
+json_text <-'{"id":"20130226771","index":"uspto_cos","amount":25,"indices":["uspto_cos","wipo_cos","epo_cos"]}'
+
+fromJSON(json_text)
+```
+
+```{r}
+variables <-  fromJSON('{
+  "id": "20130226771",
+  "index": "uspto_cos",
+  "amount": "10",
+  "indices": [
+    "uspto_cos",
+    "wipo_cos",
+    "epo_cos"
+  ]
+}')
+
+
+conn <- GraphqlClient$new(url = URL,  headers = list(Authorization = API_KEY))
+query = 'query SimilaritySearch($index: String!, $id: String!, $amount: Int, $indices: [String]) {
+  SimilaritySearch(index: $index, id: $id, amount: $amount, indices: $indices) {
+    document {
+      documentParts {
+        title
+      }
+    }
+    id
+    score
+    index
+  }
+}
+'
+
+new <- Query$new()$query('link', query)
+
+res = conn$exec(new$link, variables = variables) %>%
+    fromJSON(flatten = F)
+
+res$data
+```
+
+
