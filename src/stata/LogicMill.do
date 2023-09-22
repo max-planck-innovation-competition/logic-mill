@@ -21,8 +21,6 @@ query="""query (\$id:String!, \$index:String!, \$amount:Int) {
     document {
       documentParts {
         title
-        abstract
-
       }
     }
 	id
@@ -41,7 +39,7 @@ variables = {
 
 headers = {
     'content-type': 'application/json',
-    'Authorization': API_KEY,
+    'Authorization': f"Bearer {API_KEY}",
 }
 
 print(variables)
