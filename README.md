@@ -11,7 +11,8 @@ This repository contains public documentation and code examples for the use of t
 # Waiting list
 
 > Logic Mill is still in beta.
-You can sign up for the Logic Mill waiting list: https://logic-mill.net/waiting-list.
+ 
+You can sign up for the [Logic Mill waiting list](https://logic-mill.net/waiting-list).
 Signing up for the waiting list does not automatically give you access to the system.
 
 # API key
@@ -29,7 +30,8 @@ In the `/src` directory you will find examples no how to use the Logic Mill API 
 - [Stata](src/stata/) (using Python)
   - `LogicMill.do`: `.do` file where the python is integrated
   - `external.do`: `.do` file with external python files (`external.py` and `logic_mill.py`). It also has automated flattening of the JSON response. Not completely tested.
-  - When running/integrating in Stata you probably also want to take a look at the Python examples for the different endpoints and the code for flattening the data.
+  - When running/integrating with Stata you probably also want to take a look at the Python examples for the different endpoints and the code for flattening the data.
+- Javascript. No specific examples have been added, but the Logic Mill website has Javascript as one of the previews.
 
 # Bug reports and feature requests
 
