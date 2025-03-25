@@ -9,8 +9,6 @@ This repository contains public documentation and code examples for the use of t
 
 
 # Waiting list
-
-> Logic Mill is still in beta.
  
 You can sign up for the [Logic Mill waiting list](https://logic-mill.net/waiting-list).
 Signing up for the waiting list does not automatically give you access to the system.
@@ -47,20 +45,20 @@ If you found an error in our API or have a request to improve our system, please
 
 # Paper
 
-If you use the Logic Mill system, please cite our paper: <https://doi.org/10.48550/arXiv.2301.00200>:
+If you use the Logic Mill system, please cite our paper: <https://ceur-ws.org/Vol-3775/paper7.pdf>:
 
 ```
-@misc{erhardt2022logic,
-      title={Logic Mill - A Knowledge Navigation System},
-      author={Sebastian Erhardt and Mainak Ghosh and Erik Buunk and Michael E. Rose and Dietmar Harhoff},
-      year={2022},
-      eprint={2301.00200},
-      archivePrefix={arXiv},
-      primaryClass={cs.CL}
+@inproceedings{erhardt2024,
+  booktitle = {PatentSemTech@SIGIR},
+  pages = {25-35},
+  title = {Logic Mill - A Knowledge Navigation System},
+  type = {conference},
+  year = {2024},
+  doi = {10.48550/arXiv.2301.00200},
+  url = {https://ceur-ws.org/Vol-3775/paper7.pdf}
 }
 
 ```
-<https://arxiv.org/abs/2301.00200>
 
 <!-- # Terms of use
  -->
