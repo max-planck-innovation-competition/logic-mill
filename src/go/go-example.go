@@ -18,10 +18,10 @@ type GraphQLMutationResponse struct {
 func main() {
 	// Example usage:
 	endpointURL := "https://api.logic-mill.net/api/v1/graphql/"
-	apiKey := "YOUR API KEY HERE"
+	apiKey := "YOUR_API_KEY_HERE"
 	mutation := `
 query encodeDocument($data: EncodeObject) {
-  encodeDocument(data: $data)
+  encodeDocument(data: $data, model: "patspecter")
 }
 
 `
@@ -72,7 +72,7 @@ query encodeDocument($data: EncodeObject) {
 
 	// Set the request headers
 	request.Header.Set("Content-Type", "application/json")
-	request.Header.Set("Authorization", "Bearer "+ apiKey)
+	request.Header.Set("Authorization", "Bearer "+apiKey)
 
 	// Send the request
 	client := &http.Client{}
