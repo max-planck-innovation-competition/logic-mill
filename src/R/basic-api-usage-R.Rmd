@@ -8,9 +8,15 @@ output:
   pdf_document: default
 ---
 
+
+# Preparation
+
+Add your API KEY in the `.env` file
+
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
-API_KEY <- paste('Bearer', '<FILL YOUR API KEY HERE')
+readRenviron(".env")
+API_KEY <- paste('Bearer', Sys.getenv("API_KEY"))
 ```
 
 # Basic Logic Mill API Usage
@@ -469,7 +475,7 @@ new <- Query$new()$query('link', query)
     info = res$data$encodeDocumentAndSimilaritySearch$document$documentParts
     results = cbind(results, info)
     results
-    ```
+```
 
 ### With JSON
 ```{r}
