@@ -1,13 +1,15 @@
 ---
 title: "Logic Mill API"
 author: "Erik Buunk"
-date: "2022-09-21"
+date: "2025-04-15"
 output:
   html_document:
     df_print: paged
   pdf_document: default
 ---
+# Release
 
+Updated for use with Open Alex and DocDB families and new models (Pat-SPECTER and PaECTER)
 
 # Preparation
 
@@ -15,6 +17,7 @@ Add your API KEY in the `.env` file
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+setwd("/Users/erik/Documents/Computer/Github/logic-mill/src/R")
 readRenviron(".env")
 API_KEY <- paste('Bearer', Sys.getenv("API_KEY"))
 ```
@@ -35,6 +38,15 @@ library(jsonlite)
 library(ghql)
 library(dplyr)
 URL = 'https://api.logic-mill.net/api/v1/graphql/'
+
+# Set up headers with API key from environment
+headers = list(
+  'content-type' = 'application/json',
+  'Authorization' = API_KEY
+)
+
+# Define the default model to use
+DEFAULT_MODEL = "patspecter"
 ```
 
 ## Get the version
@@ -90,14 +102,24 @@ indices
 
 ## Getting basic document information
 
-By supplying an ID
-
-### Simple version
+By supplying an IDs
 
 ```{r}
 variables <-  fromJSON('{
-  "id": "123fa2d18fab2ae1752451405f0eac5e273f2695",
-  "index": "semanticscholar_cos"
+  "data": [
+    {
+      "index": "publications",
+      "id": "W2531700612"
+    },
+    {
+      "index": "patents",
+      "id": "64440517"
+    },
+    {
+      "index": "patents",
+      "id": "US11394112B2"
+    }
+  ]
 }')
 
 
@@ -105,17 +127,12 @@ conn <- GraphqlClient$new(
   url = URL,
   headers = list(Authorization = API_KEY)
 )
-query = 'query Document($index: String!, $id: String!) {
-  Document(index: $index, id: $id) {
+
+query = 'query Documents($data: [DatabaseSearchDocument]) {
+  Documents(data: $data) {
     id
-    documentParts {
-      title
-    }
-    metadata {
-      createdAt
-      aliases
-    }
-    vector
+    url
+    PatspecterEmbedding
   }
 }
 '
@@ -125,60 +142,11 @@ new <- Query$new()$query('link', query)
 res = conn$exec(new$link, variables = variables) %>%
     fromJSON(flatten = F)
 
-print(res$data$Document$documentParts)
-print(res$data$Document$id)
-print(res$data$Document$metadata)
-```
-
-### Parameter version
-
-For the version with Parameters we will use the `ghql` library.
-
-Based on the following website: <https://ropensci.org/blog/2020/12/08/accessing-graphql-in-r/>
-
-```{r}
-
-# create new query
-query <-  'query ($id:String!, $index:String!) {
-	Document(index:$index, id:$id) {
-	  id
-    documentParts {
-      title
-    }
-    metadata {
-      magId
-      venue
-      year
-    }
-	}
-}'
-
-new <- Query$new()$query('link', query)
-
-variables = list(id = "123fa2d18fab2ae1752451405f0eac5e273f2695",
-                 index ="semanticscholar_cos")
-
-res = conn$exec(new$link, variables = variables) %>%
-    fromJSON(flatten = F)
-
+res$data$Documents  %>% as_tibble()
 
 
 ```
 
-After this we can do the same thing:
-
-```{r}
-print(res$data$Document$id)
-print(res$data$Document$documentParts)
-```
-
-Or use `dyplr` to prettify the output
-
-```{r}
-docInfo <- res$data$Document$documentParts %>%
-    as_tibble()
-docInfo
-```
 
 ## Get the numerical representation/embedding of document in database
 
@@ -187,61 +155,81 @@ The query is the same as above, only different fields are requested
 ```{r}
 
 # create new query
-query <-  'query ($id:String!, $index:String!) {
-	Document(index:$index, id:$id) {
+query <-  'query Documents($data: [DatabaseSearchDocument]) {
+  Documents(data: $data) {
     id
-    vector
-	}
-}'
+    PatspecterEmbedding
+  }
+}
+'
 
 new <- Query$new()$query('link', query)
 
-variables = list(id = "123fa2d18fab2ae1752451405f0eac5e273f2695",
-                 index ="semanticscholar_cos")
+variables <-  fromJSON('{
+  "data": [
+    {
+      "index": "publications",
+      "id": "W2531700612"
+    }
+  ]
+}')
 
 res = conn$exec(new$link, variables = variables) %>%
     fromJSON(flatten = F)
 
-res$data$Document$vector %>% as_tibble()
+res$data$Documents$PatspecterEmbedding[[1]][1:20]
+
 ```
 
 ## Search *n* most similar documents compared to a document in the database
 
 ```{r}
-# create new query
-query <-  'query ($id:String!, $index:String!, $amount:Int) {
-  SimilaritySearch(index:$index, id:$id, amount:$amount) {
-       id
-    score
-    document {
-      documentParts {
-        title
 
-      }
+variables <-  fromJSON('{
+  "model": "patspecter",
+  "amount": 25,
+  "id": "91081326",
+  "index": "patents",
+  "indices": [
+    "patents",
+    "publications"
+  ]
+}')
+
+
+conn <- GraphqlClient$new(
+  url = URL,
+  headers = list(Authorization = API_KEY)
+)
+query = 'query SimilaritySearch($index: String!, $id: String!, $amount: Int, $indices: [String], $model: String!) {
+  SimilaritySearch(
+    index: $index
+    id: $id
+    amount: $amount
+    indices: $indices
+    model: $model
+  ) {
+    id
+    score
+    index
+    document {
+      title
+      url
     }
   }
-}'
+}
+'
+
 
 new <- Query$new()$query('link', query)
 
-variables = list(id = "123fa2d18fab2ae1752451405f0eac5e273f2695",
-                 index ="semanticscholar_cos",
-                 amount = 5)
+res = conn$exec(new$link, variables = variables) %>% fromJSON(flatten=T)
 
-res = conn$exec(new$link, variables = variables) %>%
-    fromJSON(flatten = F)
+res$data$SimilaritySearch
 
-res$data$SimilaritySearch$document$documentParts
 
 ```
 
-```{r}
-similar_docs <-  res$data$SimilaritySearch$document$documentParts
-similar_docs <-  cbind(similar_docs, id = res$data$SimilaritySearch$id, score = res$data$SimilaritySearch$score)
-
-similar_docs
-
-```
 
 ## Create a new embedding for a user document
 
@@ -271,7 +259,6 @@ biblios = data.frame(id, title, abstract)
 biblios
 ```
 
-#
 
 ```{r}
 # first item
@@ -291,14 +278,14 @@ for (col in colnames(biblio)){
 
 data$parts <-  parts
 
-variables <-  list(data=data)
+variables <-  list(data=data, model=DEFAULT_MODEL)
 variables
 ```
 
 ```{r}
 
-query = 'query encodeDocument($data: EncodeObject) {
-  encodeDocument(data: $data)
+query = 'query encodeDocument($data: EncodeObject, $model: String!) {
+  encodeDocument(data: $data, model: $model)
 }'
 
 new <- Query$new()$query('link', query)
@@ -311,12 +298,12 @@ res$data$encodeDocument %>% as_tibble()
 
 ```{r}
 URL <- 'https://api.logic-mill.net/api/v1/graphql/'
-variables <-  fromJSON('{"data":{"id":"ID","parts":[{"key":"title","value":"Airbags"},{"key":"abstract","value":"Airbags are one of the most important safety gears in motor vehicles such as cars and SUVs. These are cushions built into a vehicle that are intended to inflate in case of a car accident in order to protect occupants from injuries by preventing them from striking the interior of vehicle during a crash."}]}}')
+variables <-  fromJSON('{"data":{"id":"ID","parts":[{"key":"title","value":"Airbags"},{"key":"abstract","value":"Airbags are one of the most important safety gears in motor vehicles such as cars and SUVs. These are cushions built into a vehicle that are intended to inflate in case of a car accident in order to protect occupants from injuries by preventing them from striking the interior of vehicle during a crash."}]}, "model": "patspecter"}')
 
 
 
-query = 'query encodeDocument($data: EncodeObject) {
-  encodeDocument(data: $data)
+query = 'query encodeDocument($data: EncodeObject, $model: String!) {
+  encodeDocument(data: $data, model: $model)
 }'
 
 new <- Query$new()$query('link', query)
@@ -330,49 +317,51 @@ res$data$encodeDocument %>% as_tibble()
 ## Create embeddings for multiple documents
 
 ```{r}
-query = 'query encodeDocument($data: EncodeObject) {
-  encodeDocument(data: $data)
+query = 'query encodeDocuments($data: [EncodeObject], $model: String!) {
+  encodeDocuments(data: $data, model: $model)
 }'
 new <- Query$new()$query('link', query)
 
 df <- data.frame()
 
 for (i in 1:length(biblios)){
-    biblio <-  biblios[i,]
-    data <-  list(id=biblio$id)
-    data$parts <-  list()
+    biblio <-  biblios[i,] # third record
+    variables <-  list(data=list(id=biblio$id), model=DEFAULT_MODEL)
+    parts <-  list()
     for (col in colnames(biblio)){
         if (col!= 'id') {
             record <-  data.frame(key=col, value=biblio[,c(col)])
-            data$parts <-  rbind(parts, record)
+            parts <-  rbind(parts, record)
         }
 
     }
 
-    variables <-  list(data=data)
+    variables$data$parts <-  parts
 
     res <-  conn$exec(new$link, variables = variables) %>%
-        fromJSON(flatten = F)
+         fromJSON(flatten = F)
 
-    row <- data.frame(id=biblio$id)
-    row <- cbind(row, data.frame(t(res$data$encodeDocument)))
+
+
+    # combine the data into a single dataframe
+    embedding = tibble(embedding=res$data$encodeDocuments)
+    row <- tibble(id=biblio$id, embedding=embedding)
     df <- rbind(df, row)
 
     }
 
-df[,1:5 ]
-
-
-
-
-
-```
+df
+d```
 
 ## Find similarity between user supplied documents
 
 ```{r}
-query <- 'query encodeDocumentAndSimilarityCalculation($data: [EncodeObject]) {
-  encodeDocumentAndSimilarityCalculation(data: $data, similarityMetric: cosine) {
+query <- 'query encodeDocumentAndSimilarityCalculation($data: [EncodeObject], $similarityMetric: similarityMetric, $model: String!) {
+  encodeDocumentAndSimilarityCalculation(
+    data: $data,
+    similarityMetric: $similarityMetric,
+    model: $model
+  ) {
     similarities
     xs {
       id
@@ -410,7 +399,7 @@ for( i in 1:nrow(biblios)) {
 }
 
 rownames(data)=1:nrow(data)
-variables = list(data=data.frame(data), metric='cosine')
+variables = list(data=data.frame(data), similarityMetric='cosine', model=DEFAULT_MODEL)
 
 ```
 
@@ -429,85 +418,44 @@ df
 ## Find n similar documents
 
 ```{r}
-query = 'query embedDocumentAndSimilaritySearch($data: [EncodeDocumentPart], $indices: [String], $amount: Int) {
-  encodeDocumentAndSimilaritySearch(
-    data: $data
-    indices: $indices
-    amount: $amount
-  ) {
-    document {
-      documentParts {
-        title
-      }
-    }
-    id
-    score
-    index
-  }
-}
-'
-
-new <- Query$new()$query('link', query)
-
-
-    # prepare data
-    biblio = biblios[3,] # third record
-    variables = list(indices=indices, amount=3)
-    parts = list()
-
-    for (col in colnames(biblio)){
-        if (col!= 'id') {
-            record = data.frame(key=col, value=biblio[,c(col)])
-            parts = rbind(parts, record)
-        }
-
-    }
-
-    variables$data <-  parts
-
-    res <-  conn$exec(new$link, variables = variables) %>%
-         fromJSON(flatten = F)
-
-
-
-    # combine the data into a single dataframe
-    results = res$data$encodeDocumentAndSimilaritySearch[c("index","score")]
-    info = res$data$encodeDocumentAndSimilaritySearch$document$documentParts
-    results = cbind(results, info)
-    results
-```
-
-### With JSON
-```{r}
-json_text <-'{"id":"20130226771","index":"uspto_cos","amount":25,"indices":["uspto_cos","wipo_cos","epo_cos"]}'
-
-fromJSON(json_text)
-```
-
-```{r}
 variables <-  fromJSON('{
-  "id": "20130226771",
-  "index": "uspto_cos",
-  "amount": "10",
+  "model": "patspecter",
+  "data": [
+    {
+      "key": "title",
+      "value": "Airbags"
+    },
+    {
+      "key": "abstract",
+      "value": "Airbags are one of the most important safety gears in motor vehicles such as cars and SUVs. These are cushions built into a vehicle that are intended to inflate in case of a car accident in order to protect occupants from injuries by preventing them from striking the interior of vehicle during a crash."
+    }
+  ],
+  "amount": 25,
   "indices": [
-    "uspto_cos",
-    "wipo_cos",
-    "epo_cos"
+    "patents",
+    "publications"
   ]
 }')
 
 
-conn <- GraphqlClient$new(url = URL,  headers = list(Authorization = API_KEY))
-query = 'query SimilaritySearch($index: String!, $id: String!, $amount: Int, $indices: [String]) {
-  SimilaritySearch(index: $index, id: $id, amount: $amount, indices: $indices) {
-    document {
-      documentParts {
-        title
-      }
-    }
+conn <- GraphqlClient$new(
+  url = URL,
+  headers = list(Authorization = API_KEY)
+)
+query = 'query embedDocumentAndSimilaritySearch($data: [EncodeDocumentPart], $indices: [String], $amount: Int, $model: String!) {
+  encodeDocumentAndSimilaritySearch(
+    data: $data
+    indices: $indices
+    amount: $amount
+    model: $model
+  ) {
     id
     score
     index
+    document {
+      title
+      url
+    }
   }
 }
 '
@@ -515,9 +463,10 @@ query = 'query SimilaritySearch($index: String!, $id: String!, $amount: Int, $in
 new <- Query$new()$query('link', query)
 
 res = conn$exec(new$link, variables = variables) %>%
-    fromJSON(flatten = F)
+    fromJSON(flatten = T
+             )
 
-res$data
+res$data$encodeDocumentAndSimilaritySearch %>% as_tibble()
+
 ```
-
 

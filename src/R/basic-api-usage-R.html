@@ -11,7 +11,7 @@
 
 <meta name="author" content="Erik Buunk" />
 
-<meta name="date" content="2022-09-21" />
+<meta name="date" content="2025-04-15" />
 
 <title>Logic Mill API</title>
 
@@ -1623,11 +1623,20 @@ display: none;
 
 <h1 class="title toc-ignore">Logic Mill API</h1>
 <h4 class="author">Erik Buunk</h4>
-<h4 class="date">2022-09-21</h4>
+<h4 class="date">2025-04-15</h4>
 
 </div>
 
 
+<div id="release" class="section level1">
+<h1>Release</h1>
+<p>Updated for use with Open Alex and DocDB families and new models
+(Pat-SPECTER and PaECTER)</p>
+</div>
+<div id="preparation" class="section level1">
+<h1>Preparation</h1>
+<p>Add your API KEY in the <code>.env</code> file</p>
+</div>
 <div id="basic-logic-mill-api-usage" class="section level1">
 <h1>Basic Logic Mill API Usage</h1>
 <p>Based on: <a href="https://www.dataquest.io/blog/r-api-tutorial/" class="uri">https://www.dataquest.io/blog/r-api-tutorial/</a></p>
@@ -1636,14 +1645,23 @@ display: none;
 library(jsonlite)
 library(ghql)
 library(dplyr)
-URL = &#39;https://api.logic-mill.net/api/v1/graphql/&#39;</code></pre>
+URL = &#39;https://api.logic-mill.net/api/v1/graphql/&#39;
+
+# Set up headers with API key from environment
+headers = list(
+  &#39;content-type&#39; = &#39;application/json&#39;,
+  &#39;Authorization&#39; = API_KEY
+)
+
+# Define the default model to use
+DEFAULT_MODEL = &quot;patspecter&quot;</code></pre>
 <div id="get-the-version" class="section level2">
 <h2>Get the version</h2>
 <p>This simple request will get the current version of the API and is
 also an easy way to check if the server is running and the requests are
 constructed the correct way.</p>
 <pre class="r"><code># use single quotes
-query &lt;- &#39;{ 
+query &lt;- &#39;{
   Version
 }&#39;
 body = list(query = query)
@@ -1651,8 +1669,8 @@ body = list(query = query)
 res = POST(URL, query = body, headers=headers)
 
 print(res)</code></pre>
-<pre><code>## Response [https://api.logic-mill.net/api/v1/graphql?query=%7B%20%0A%20%20Version%0A%7D]
-##   Date: 2023-09-22 09:32
+<pre><code>## Response [https://api.logic-mill.net/api/v1/graphql?query=%7B%0A%20%20Version%0A%7D]
+##   Date: 2025-04-15 08:31
 ##   Status: 200
 ##   Content-Type: application/json; charset=utf-8
 ##   Size: 48 B
@@ -1684,17 +1702,27 @@ data = fromJSON(rawToChar(res$content))$data</code></pre>
 <p>The list of all the available indices</p>
 <pre class="r"><code>indices &lt;- data$IndicesNames$name
 indices</code></pre>
-<pre><code>## [1] &quot;semanticscholar_cos&quot; &quot;epo_cos&quot;             &quot;uspto_cos&quot;          
-## [4] &quot;wipo_cos&quot;</code></pre>
+<pre><code>## [1] &quot;publications_v2&quot; &quot;patents_v2&quot;      &quot;patents_v3&quot;      &quot;upc_cases&quot;      
+## [5] &quot;publications&quot;</code></pre>
 </div>
 <div id="getting-basic-document-information" class="section level2">
 <h2>Getting basic document information</h2>
-<p>By supplying an ID</p>
-<div id="simple-version" class="section level3">
-<h3>Simple version</h3>
+<p>By supplying an IDs</p>
 <pre class="r"><code>variables &lt;-  fromJSON(&#39;{
-  &quot;id&quot;: &quot;123fa2d18fab2ae1752451405f0eac5e273f2695&quot;,
-  &quot;index&quot;: &quot;semanticscholar_cos&quot;
+  &quot;data&quot;: [
+    {
+      &quot;index&quot;: &quot;publications&quot;,
+      &quot;id&quot;: &quot;W2531700612&quot;
+    },
+    {
+      &quot;index&quot;: &quot;patents&quot;,
+      &quot;id&quot;: &quot;64440517&quot;
+    },
+    {
+      &quot;index&quot;: &quot;patents&quot;,
+      &quot;id&quot;: &quot;US11394112B2&quot;
+    }
+  ]
 }&#39;)
 
 
@@ -1702,17 +1730,12 @@ conn &lt;- GraphqlClient$new(
   url = URL,
   headers = list(Authorization = API_KEY)
 )
-query = &#39;query Document($index: String!, $id: String!) {
-  Document(index: $index, id: $id) {
+
+query = &#39;query Documents($data: [DatabaseSearchDocument]) {
+  Documents(data: $data) {
     id
-    documentParts {
-      title
-    }
-    metadata {
-      createdAt
-      aliases
-    }
-    vector
+    url
+    PatspecterEmbedding
   }
 }
 &#39;
@@ -1722,60 +1745,11 @@ new &lt;- Query$new()$query(&#39;link&#39;, query)
 res = conn$exec(new$link, variables = variables) %&gt;%
     fromJSON(flatten = F)
 
-print(res$data$Document$documentParts)</code></pre>
-<pre><code>## $title
-## [1] &quot;Airbag system for occupants of a vehicle and vehicle provided with such an air bag system.&quot;</code></pre>
-<pre class="r"><code>print(res$data$Document$id)</code></pre>
-<pre><code>## [1] &quot;123fa2d18fab2ae1752451405f0eac5e273f2695&quot;</code></pre>
-<pre class="r"><code>print(res$data$Document$metadata)</code></pre>
-<pre><code>## $aliases
-## list()
-## 
-## $createdAt
-## NULL</code></pre>
-</div>
-<div id="parameter-version" class="section level3">
-<h3>Parameter version</h3>
-<p>For the version with Parameters we will use the <code>ghql</code>
-library.</p>
-<p>Based on the following website: <a href="https://ropensci.org/blog/2020/12/08/accessing-graphql-in-r/" class="uri">https://ropensci.org/blog/2020/12/08/accessing-graphql-in-r/</a></p>
-<pre class="r"><code># create new query
-query &lt;-  &#39;query ($id:String!, $index:String!) { 
-    Document(index:$index, id:$id) {
-      id
-    documentParts {
-      title
-    }
-    metadata {
-      magId
-      venue
-      year
-    }
-    }
-}&#39;
-
-new &lt;- Query$new()$query(&#39;link&#39;, query)
-
-variables = list(id = &quot;123fa2d18fab2ae1752451405f0eac5e273f2695&quot;, 
-                 index =&quot;semanticscholar_cos&quot;)
-
-res = conn$exec(new$link, variables = variables) %&gt;%
-    fromJSON(flatten = F)</code></pre>
-<p>After this we can do the same thing:</p>
-<pre class="r"><code>print(res$data$Document$id)</code></pre>
-<pre><code>## [1] &quot;123fa2d18fab2ae1752451405f0eac5e273f2695&quot;</code></pre>
-<pre class="r"><code>print(res$data$Document$documentParts)</code></pre>
-<pre><code>## $title
-## [1] &quot;Airbag system for occupants of a vehicle and vehicle provided with such an air bag system.&quot;</code></pre>
-<p>Or use <code>dyplr</code> to prettify the output</p>
-<pre class="r"><code>docInfo &lt;- res$data$Document$documentParts %&gt;% 
-    as_tibble()
-docInfo</code></pre>
+res$data$Documents  %&gt;% as_tibble()</code></pre>
 <div data-pagedtable="false">
 <script data-pagedtable-source type="application/json">
-{"columns":[{"label":["title"],"name":[1],"type":["chr"],"align":["left"]}],"data":[{"1":"Airbag system for occupants of a vehicle and vehicle provided with such an air bag system."}],"options":{"columns":{"min":{},"max":[10]},"rows":{"min":[10],"max":[10]},"pages":{}}}
+{"columns":[{"label":["PatspecterEmbedding"],"name":[1],"type":["list"],"align":["right"]},{"label":["id"],"name":[2],"type":["chr"],"align":["left"]},{"label":["url"],"name":[3],"type":["chr"],"align":["left"]}],"data":[{"1":"<dbl [768]>","2":"W2531700612","3":"https://openalex.org/works/W2531700612"},{"1":"<dbl [768]>","2":"64440517","3":"https://worldwide.espacenet.com/patent/search?q=CN208185453U"},{"1":"<dbl [768]>","2":"69888419","3":"https://worldwide.espacenet.com/patent/search?q=US11394112B2"}],"options":{"columns":{"min":{},"max":[10]},"rows":{"min":[10],"max":[10]},"pages":{}}}
   </script>
-</div>
 </div>
 </div>
 <div id="get-the-numerical-representationembedding-of-document-in-database" class="section level2">
@@ -1784,67 +1758,81 @@ database</h2>
 <p>The query is the same as above, only different fields are
 requested</p>
 <pre class="r"><code># create new query
-query &lt;-  &#39;query ($id:String!, $index:String!) { 
-    Document(index:$index, id:$id) {
+query &lt;-  &#39;query Documents($data: [DatabaseSearchDocument]) {
+  Documents(data: $data) {
     id
-    vector
-    }
-}&#39;
+    PatspecterEmbedding
+  }
+}
+&#39;
 
 new &lt;- Query$new()$query(&#39;link&#39;, query)
 
-variables = list(id = &quot;123fa2d18fab2ae1752451405f0eac5e273f2695&quot;, 
-                 index =&quot;semanticscholar_cos&quot;)
+variables &lt;-  fromJSON(&#39;{
+  &quot;data&quot;: [
+    {
+      &quot;index&quot;: &quot;publications&quot;,
+      &quot;id&quot;: &quot;W2531700612&quot;
+    }
+  ]
+}&#39;)
 
 res = conn$exec(new$link, variables = variables) %&gt;%
     fromJSON(flatten = F)
 
-res$data$Document$vector %&gt;% as_tibble()</code></pre>
-<div data-pagedtable="false">
-<script data-pagedtable-source type="application/json">
-{"columns":[{"label":["value"],"name":[1],"type":["dbl"],"align":["right"]}],"data":[{"1":"1.092943200"},{"1":"-1.475240800"},{"1":"1.956935400"},{"1":"-1.193726500"},{"1":"-2.406723500"},{"1":"-0.269927680"},{"1":"1.292162700"},{"1":"-1.082170700"},{"1":"0.683188260"},{"1":"0.263301430"},{"1":"-0.165061980"},{"1":"-1.203266100"},{"1":"-0.174342270"},{"1":"0.287307300"},{"1":"1.245105500"},{"1":"-0.803316650"},{"1":"5.182167000"},{"1":"0.872987200"},{"1":"-2.596766000"},{"1":"0.392892600"},{"1":"2.521847200"},{"1":"4.911891500"},{"1":"-2.954858800"},{"1":"0.035614520"},{"1":"0.409832900"},{"1":"-2.345502000"},{"1":"3.270266000"},{"1":"0.774085940"},{"1":"-0.275263400"},{"1":"-2.624821200"},{"1":"-1.010841600"},{"1":"1.122698500"},{"1":"-0.674731730"},{"1":"0.122239320"},{"1":"-2.757145000"},{"1":"1.436896400"},{"1":"-0.808193800"},{"1":"-1.055164100"},{"1":"1.008451800"},{"1":"-2.978635000"},{"1":"-3.284774500"},{"1":"5.777262000"},{"1":"-3.119098700"},{"1":"-0.150887530"},{"1":"7.403422000"},{"1":"-0.221121640"},{"1":"8.109995000"},{"1":"-0.700310800"},{"1":"0.626073900"},{"1":"2.059036300"},{"1":"4.135303500"},{"1":"4.013252700"},{"1":"-2.270992000"},{"1":"-0.350156040"},{"1":"0.787379740"},{"1":"-2.995571600"},{"1":"1.016023500"},{"1":"0.902467100"},{"1":"0.990562740"},{"1":"-0.912953400"},{"1":"-1.620210600"},{"1":"-1.128872500"},{"1":"-0.112920165"},{"1":"-2.104409200"},{"1":"-1.279363900"},{"1":"1.540464900"},{"1":"-2.820642500"},{"1":"-4.605386000"},{"1":"-1.435272700"},{"1":"1.790822300"},{"1":"0.954494950"},{"1":"1.034730200"},{"1":"-2.714454700"},{"1":"-1.745606400"},{"1":"0.679212450"},{"1":"0.598761900"},{"1":"-0.824408200"},{"1":"2.890832700"},{"1":"8.075039000"},{"1":"0.770892260"},{"1":"1.914947300"},{"1":"-0.841609900"},{"1":"-0.708476100"},{"1":"-2.324272600"},{"1":"1.777265200"},{"1":"1.480549800"},{"1":"-1.817772900"},{"1":"-3.628760000"},{"1":"1.739280500"},{"1":"3.627074200"},{"1":"-1.495278700"},{"1":"-3.281993900"},{"1":"1.849512800"},{"1":"0.208252090"},{"1":"3.114242600"},{"1":"0.850064640"},{"1":"0.918231500"},{"1":"-0.195994760"},{"1":"1.655839000"},{"1":"-1.271692000"},{"1":"-4.493424000"},{"1":"1.077113000"},{"1":"1.511083800"},{"1":"-0.928551200"},{"1":"-2.273642500"},{"1":"3.314940500"},{"1":"0.883327100"},{"1":"1.086781600"},{"1":"4.961881600"},{"1":"-3.772196500"},{"1":"3.204957000"},{"1":"-0.650411100"},{"1":"-3.698723600"},{"1":"0.963734600"},{"1":"0.255943480"},{"1":"-1.844638800"},{"1":"-5.345731000"},{"1":"-0.496143850"},{"1":"4.594619800"},{"1":"-2.847789300"},{"1":"3.900701300"},{"1":"2.656515100"},{"1":"-1.942217200"},{"1":"3.949187800"},{"1":"-1.259440200"},{"1":"-4.978388000"},{"1":"1.809114200"},{"1":"2.096167000"},{"1":"0.591095400"},{"1":"-1.458350200"},{"1":"-0.928123000"},{"1":"-2.162279800"},{"1":"-0.686552170"},{"1":"-4.384215400"},{"1":"3.254809000"},{"1":"-0.350610850"},{"1":"4.507698000"},{"1":"-1.085437900"},{"1":"-3.514444000"},{"1":"4.031724500"},{"1":"0.084382650"},{"1":"-0.284748880"},{"1":"0.307217600"},{"1":"3.623769300"},{"1":"-0.091303660"},{"1":"-0.045635610"},{"1":"2.792412800"},{"1":"-5.308488000"},{"1":"-3.259007700"},{"1":"-1.461764900"},{"1":"2.794277400"},{"1":"2.615234100"},{"1":"2.526308800"},{"1":"-1.072001800"},{"1":"1.211606900"},{"1":"4.588376000"},{"1":"-3.432818400"},{"1":"-1.194225300"},{"1":"-0.768916850"},{"1":"1.819175100"},{"1":"1.254411300"},{"1":"0.967518570"},{"1":"0.611459260"},{"1":"4.277826300"},{"1":"2.211839700"},{"1":"-4.336531600"},{"1":"0.502715100"},{"1":"2.216439700"},{"1":"1.897188100"},{"1":"-2.174549000"},{"1":"1.071973400"},{"1":"-2.772441100"},{"1":"4.892902400"},{"1":"-3.349386200"},{"1":"0.859003540"},{"1":"-2.044608600"},{"1":"-0.904338600"},{"1":"2.126869700"},{"1":"2.971250800"},{"1":"0.979644660"},{"1":"0.960643950"},{"1":"1.273528000"},{"1":"4.424576000"},{"1":"-0.768193240"},{"1":"-0.111341506"},{"1":"-6.537665400"},{"1":"1.422495200"},{"1":"-5.308834600"},{"1":"1.331744900"},{"1":"-1.425494600"},{"1":"1.760129100"},{"1":"-0.315564450"},{"1":"0.252523900"},{"1":"-1.611905600"},{"1":"-0.797353740"},{"1":"0.252276900"},{"1":"-3.160453000"},{"1":"-2.296240300"},{"1":"1.503323800"},{"1":"1.363048000"},{"1":"0.253908570"},{"1":"-1.729667000"},{"1":"-2.728249500"},{"1":"-2.245145800"},{"1":"-1.725363000"},{"1":"-2.901997000"},{"1":"-4.930044700"},{"1":"1.744866500"},{"1":"-3.679257000"},{"1":"-0.284602800"},{"1":"-1.498733900"},{"1":"-6.550842300"},{"1":"0.622629340"},{"1":"0.350183430"},{"1":"0.692184400"},{"1":"-1.860851500"},{"1":"1.763816100"},{"1":"1.631439200"},{"1":"2.311326500"},{"1":"1.119836800"},{"1":"-3.351607800"},{"1":"1.204286300"},{"1":"-4.217170200"},{"1":"-0.060021220"},{"1":"-2.420084500"},{"1":"0.551916000"},{"1":"1.461568500"},{"1":"1.285729900"},{"1":"3.739912000"},{"1":"-4.549766500"},{"1":"-0.122612240"},{"1":"0.784200670"},{"1":"4.190673000"},{"1":"1.020042200"},{"1":"1.546271800"},{"1":"1.788473400"},{"1":"-1.057889900"},{"1":"-3.881201300"},{"1":"1.456813600"},{"1":"-4.290492000"},{"1":"2.039180000"},{"1":"4.196350600"},{"1":"0.123812260"},{"1":"-0.519795900"},{"1":"-2.449174000"},{"1":"-1.013227900"},{"1":"5.031021000"},{"1":"-0.053764640"},{"1":"0.142994500"},{"1":"-4.956410400"},{"1":"1.682844000"},{"1":"0.912940000"},{"1":"4.140311000"},{"1":"0.017603040"},{"1":"-3.040770000"},{"1":"-1.089683800"},{"1":"2.449959500"},{"1":"-0.760176540"},{"1":"-5.430305000"},{"1":"2.469513000"},{"1":"-3.454113700"},{"1":"3.389980600"},{"1":"-5.518255000"},{"1":"2.166243800"},{"1":"-1.439866500"},{"1":"6.939997000"},{"1":"6.301924700"},{"1":"0.709537270"},{"1":"0.550795560"},{"1":"-0.001826018"},{"1":"1.961946700"},{"1":"-1.153422800"},{"1":"-2.978312500"},{"1":"-1.138952500"},{"1":"-0.926336050"},{"1":"3.853246200"},{"1":"-2.873798800"},{"1":"3.764289600"},{"1":"-3.591799700"},{"1":"2.373862700"},{"1":"1.131205100"},{"1":"-1.776193000"},{"1":"-1.588749600"},{"1":"-2.089068000"},{"1":"5.228540400"},{"1":"-5.010389300"},{"1":"0.327553840"},{"1":"0.697652000"},{"1":"3.731294400"},{"1":"5.380647700"},{"1":"-1.142302800"},{"1":"-1.081020100"},{"1":"0.729207300"},{"1":"-2.801854600"},{"1":"-1.220479200"},{"1":"1.869480800"},{"1":"1.704943800"},{"1":"-0.802598540"},{"1":"3.375983700"},{"1":"2.872888600"},{"1":"0.192067560"},{"1":"3.491296300"},{"1":"-0.574835000"},{"1":"3.266629200"},{"1":"1.684187500"},{"1":"-0.699443100"},{"1":"-2.644548000"},{"1":"2.892034500"},{"1":"-2.995908700"},{"1":"0.395777820"},{"1":"1.095410600"},{"1":"4.720828000"},{"1":"2.086484700"},{"1":"-1.954955200"},{"1":"2.138400600"},{"1":"-2.928586000"},{"1":"-8.761742000"},{"1":"-1.552116500"},{"1":"-0.604861400"},{"1":"3.234445000"},{"1":"0.213768300"},{"1":"0.173613830"},{"1":"1.109471300"},{"1":"0.947855800"},{"1":"-1.120084500"},{"1":"-4.291125300"},{"1":"-2.171514500"},{"1":"-6.453536000"},{"1":"2.496476700"},{"1":"1.563999200"},{"1":"1.917295000"},{"1":"-3.922356600"},{"1":"-3.094912500"},{"1":"0.446353300"},{"1":"4.272525300"},{"1":"0.676486500"},{"1":"7.518272000"},{"1":"-1.453870000"},{"1":"-1.061857600"},{"1":"0.840974900"},{"1":"-1.575514000"},{"1":"-1.058283800"},{"1":"0.130140780"},{"1":"3.350316500"},{"1":"5.954243000"},{"1":"3.379228600"},{"1":"-3.132530000"},{"1":"2.934833000"},{"1":"0.590074700"},{"1":"2.208683500"},{"1":"2.187804700"},{"1":"0.187699560"},{"1":"-1.104845300"},{"1":"0.896095000"},{"1":"1.418773200"},{"1":"0.722591700"},{"1":"2.132513500"},{"1":"-0.998885630"},{"1":"-1.358793600"},{"1":"-1.033328500"},{"1":"-4.322410000"},{"1":"1.707424900"},{"1":"0.678637600"},{"1":"0.204751690"},{"1":"-2.203668800"},{"1":"-1.672811200"},{"1":"3.858593700"},{"1":"2.493429000"},{"1":"-3.455401400"},{"1":"-0.550027400"},{"1":"-2.565452000"},{"1":"5.139364200"},{"1":"-0.899667900"},{"1":"2.759539800"},{"1":"2.265994800"},{"1":"-2.969089500"},{"1":"2.483270000"},{"1":"-2.294498000"},{"1":"-3.593533000"},{"1":"-3.444313500"},{"1":"3.910075200"},{"1":"-0.636350630"},{"1":"0.723178600"},{"1":"-0.548484200"},{"1":"0.834230300"},{"1":"-1.658202500"},{"1":"-1.334599300"},{"1":"-2.045987600"},{"1":"0.478385150"},{"1":"0.897687800"},{"1":"-3.176599500"},{"1":"-6.282604000"},{"1":"1.470189300"},{"1":"0.077867390"},{"1":"1.686873700"},{"1":"-6.285892500"},{"1":"0.737508800"},{"1":"-1.213522200"},{"1":"2.232396000"},{"1":"-2.383755000"},{"1":"-0.953561070"},{"1":"-0.107842040"},{"1":"-1.539521800"},{"1":"0.536351860"},{"1":"1.512010100"},{"1":"5.040415000"},{"1":"-1.657083200"},{"1":"1.859713000"},{"1":"0.855123040"},{"1":"-0.150348830"},{"1":"-1.264772200"},{"1":"-1.629574800"},{"1":"-0.789744850"},{"1":"1.886335700"},{"1":"-2.632515000"},{"1":"1.009578200"},{"1":"3.890831000"},{"1":"-3.417916300"},{"1":"2.240088000"},{"1":"1.906061600"},{"1":"-3.928549300"},{"1":"-4.269647000"},{"1":"4.368907500"},{"1":"-1.418982500"},{"1":"-1.100627000"},{"1":"-1.570446600"},{"1":"0.996281700"},{"1":"1.437574600"},{"1":"0.975607000"},{"1":"-2.037968200"},{"1":"-1.848377700"},{"1":"-0.142873500"},{"1":"-0.340182420"},{"1":"6.287504700"},{"1":"2.980743200"},{"1":"-3.183033500"},{"1":"1.967280700"},{"1":"0.617095600"},{"1":"1.017308700"},{"1":"-0.658578400"},{"1":"-2.654770900"},{"1":"4.099925000"},{"1":"-0.294140580"},{"1":"2.721025200"},{"1":"-0.106086970"},{"1":"1.571862900"},{"1":"-2.191771000"},{"1":"-2.071697700"},{"1":"-3.253385300"},{"1":"1.870624900"},{"1":"2.283499000"},{"1":"1.535138600"},{"1":"-1.030673100"},{"1":"4.405373600"},{"1":"-1.500865700"},{"1":"2.327363700"},{"1":"1.338839000"},{"1":"-0.786451900"},{"1":"3.253579400"},{"1":"-2.606811500"},{"1":"0.930316450"},{"1":"0.869971300"},{"1":"-1.234460100"},{"1":"-0.919959600"},{"1":"1.615340100"},{"1":"1.287322500"},{"1":"0.227582700"},{"1":"0.684052000"},{"1":"0.835033800"},{"1":"0.121116700"},{"1":"0.316872480"},{"1":"2.056036500"},{"1":"-1.237544900"},{"1":"-2.955548300"},{"1":"0.956853450"},{"1":"1.640788600"},{"1":"-3.338496200"},{"1":"-1.633011900"},{"1":"3.932892000"},{"1":"0.352835180"},{"1":"2.077093000"},{"1":"1.399084800"},{"1":"-8.319827000"},{"1":"1.783547300"},{"1":"-0.460358980"},{"1":"-0.627403740"},{"1":"5.000411000"},{"1":"-1.969208600"},{"1":"-3.003953200"},{"1":"-7.000456000"},{"1":"-1.793300200"},{"1":"0.064830480"},{"1":"1.877223500"},{"1":"-6.574793000"},{"1":"-2.814915700"},{"1":"-0.838567700"},{"1":"0.250722700"},{"1":"-1.216729600"},{"1":"1.301384400"},{"1":"-0.396221500"},{"1":"1.192077900"},{"1":"-0.750646770"},{"1":"2.653487200"},{"1":"0.892181200"},{"1":"2.656568000"},{"1":"0.851939260"},{"1":"0.918226500"},{"1":"0.725962400"},{"1":"-0.622033100"},{"1":"-3.415372800"},{"1":"-4.067343000"},{"1":"0.534698370"},{"1":"1.585797200"},{"1":"-4.791455000"},{"1":"-3.136985800"},{"1":"4.486691500"},{"1":"-2.514096300"},{"1":"0.497978200"},{"1":"0.160465870"},{"1":"-3.232015600"},{"1":"-1.041803400"},{"1":"-4.201510400"},{"1":"-2.212258300"},{"1":"-0.508828400"},{"1":"2.675200200"},{"1":"2.836693500"},{"1":"-0.940275430"},{"1":"-1.273087500"},{"1":"2.468625500"},{"1":"-3.073576700"},{"1":"-2.029827600"},{"1":"0.687944400"},{"1":"-3.756823500"},{"1":"-0.477758770"},{"1":"-0.481711150"},{"1":"-4.693544400"},{"1":"3.508701800"},{"1":"0.686752140"},{"1":"-1.228485600"},{"1":"1.700292100"},{"1":"-2.141310200"},{"1":"4.184840000"},{"1":"-0.087980890"},{"1":"-1.520080600"},{"1":"-0.727176800"},{"1":"-2.471755700"},{"1":"2.590278400"},{"1":"-0.839734440"},{"1":"2.095399400"},{"1":"0.919679400"},{"1":"3.224491600"},{"1":"-4.682408300"},{"1":"4.900100000"},{"1":"-0.786958800"},{"1":"2.154826600"},{"1":"-1.444673300"},{"1":"-3.968591500"},{"1":"-1.609309900"},{"1":"5.157952300"},{"1":"-1.056483000"},{"1":"0.226178590"},{"1":"-0.603651640"},{"1":"-2.957613500"},{"1":"-1.759179500"},{"1":"-2.125449000"},{"1":"-1.308184900"},{"1":"1.431421500"},{"1":"-1.028197000"},{"1":"-2.638224100"},{"1":"-0.938246200"},{"1":"2.895846400"},{"1":"6.972577000"},{"1":"-3.288353400"},{"1":"-0.493751800"},{"1":"-1.999136700"},{"1":"-2.140452400"},{"1":"0.902100700"},{"1":"-3.649437400"},{"1":"1.800839500"},{"1":"-0.972966550"},{"1":"-1.171039100"},{"1":"-1.611525700"},{"1":"-3.829223200"},{"1":"2.661079400"},{"1":"0.791427000"},{"1":"-1.136428600"},{"1":"-1.497722900"},{"1":"4.414293000"},{"1":"2.588581000"},{"1":"4.925958600"},{"1":"-1.850822700"},{"1":"-2.639225500"},{"1":"2.056593400"},{"1":"-1.592796700"},{"1":"3.053594600"},{"1":"-4.767820400"},{"1":"-2.595977000"},{"1":"1.320519600"},{"1":"1.417347900"},{"1":"-0.838603000"},{"1":"0.525429500"},{"1":"4.163696000"},{"1":"-5.975253000"},{"1":"1.210147500"},{"1":"-0.045100690"},{"1":"-0.908832550"},{"1":"-1.492352500"},{"1":"3.141098500"},{"1":"0.143813370"},{"1":"-0.767110470"},{"1":"-5.012923700"},{"1":"4.569906000"},{"1":"7.218679000"},{"1":"-0.134283360"},{"1":"-1.875269700"},{"1":"-0.652303600"},{"1":"-2.290877000"},{"1":"0.877368800"},{"1":"-0.256925670"},{"1":"0.603488000"},{"1":"0.374537350"},{"1":"2.437010300"},{"1":"-0.598559260"},{"1":"2.782584200"},{"1":"-0.967897000"},{"1":"-3.050263400"},{"1":"0.471190800"},{"1":"0.427378000"},{"1":"1.987352800"},{"1":"3.858059400"},{"1":"3.530510200"},{"1":"-0.083648700"},{"1":"2.317494900"},{"1":"-4.910289300"},{"1":"-1.453544900"},{"1":"4.149856000"},{"1":"1.840698000"},{"1":"2.684629400"},{"1":"-3.697471600"},{"1":"-2.420214700"},{"1":"-1.407206800"},{"1":"4.475527000"},{"1":"0.456197230"},{"1":"-1.398922000"},{"1":"6.647796600"},{"1":"1.048299600"},{"1":"0.251182970"},{"1":"-0.060027240"},{"1":"1.083527600"},{"1":"-1.109041800"},{"1":"3.186155800"},{"1":"2.518227300"},{"1":"-2.953399200"},{"1":"2.816713600"},{"1":"2.038445000"},{"1":"0.498922000"},{"1":"0.958794650"},{"1":"4.405092200"},{"1":"0.588920400"},{"1":"-3.476617600"},{"1":"4.065247500"},{"1":"5.524298700"},{"1":"1.474410800"},{"1":"0.677961800"},{"1":"-3.751801000"},{"1":"-2.379672800"},{"1":"-2.661397200"},{"1":"0.608074300"},{"1":"5.521298400"},{"1":"-6.331171000"},{"1":"-2.179081400"},{"1":"-2.334952400"},{"1":"-0.747169000"},{"1":"0.260519470"},{"1":"2.436274000"},{"1":"1.586239300"},{"1":"1.650670400"},{"1":"0.020899102"},{"1":"1.950011500"},{"1":"3.551283400"},{"1":"2.127536000"},{"1":"1.206916900"},{"1":"0.587695400"},{"1":"-1.083972900"},{"1":"2.701068900"},{"1":"-1.430871500"},{"1":"-1.629684700"},{"1":"-0.144585430"},{"1":"-4.823118700"},{"1":"-3.618946600"},{"1":"-0.841885800"},{"1":"4.867331500"},{"1":"6.607318000"},{"1":"-0.668494100"},{"1":"0.966767970"},{"1":"-2.396277200"},{"1":"-1.242807500"},{"1":"-5.009754700"},{"1":"3.038982900"},{"1":"-1.159667600"},{"1":"2.525186500"},{"1":"-3.708903800"},{"1":"-0.548157160"},{"1":"-3.418959100"},{"1":"-0.547891440"},{"1":"2.666026600"},{"1":"-0.763316040"},{"1":"-2.358930000"},{"1":"-3.610639300"},{"1":"-0.626040600"},{"1":"0.549922350"},{"1":"-2.830142500"},{"1":"-0.094292490"},{"1":"0.590641800"},{"1":"0.712758540"},{"1":"1.411807100"},{"1":"1.722756600"},{"1":"-1.181142900"},{"1":"0.431604330"},{"1":"-0.110434800"},{"1":"0.268974800"},{"1":"2.941640400"},{"1":"-0.077304065"},{"1":"2.325884300"},{"1":"-1.578557800"},{"1":"-2.056477800"},{"1":"-3.327078000"},{"1":"6.422936400"},{"1":"-5.832368400"},{"1":"5.208629600"},{"1":"4.124880000"},{"1":"-2.608374600"},{"1":"2.141783700"},{"1":"1.613073000"},{"1":"-0.907578700"},{"1":"0.033158198"},{"1":"4.769477000"},{"1":"3.843949800"},{"1":"0.343373900"},{"1":"-3.700651400"},{"1":"4.671421000"},{"1":"-1.009602400"},{"1":"-2.537643000"},{"1":"-1.378872600"},{"1":"-2.200227500"},{"1":"-4.094550600"},{"1":"1.283499500"},{"1":"-2.608217000"},{"1":"3.112527000"},{"1":"3.327671000"},{"1":"1.246940100"},{"1":"-0.759638550"},{"1":"-1.890327900"},{"1":"-0.698991100"},{"1":"0.538476050"},{"1":"1.920824000"},{"1":"-1.343108200"},{"1":"1.320033100"},{"1":"-3.000054800"},{"1":"2.355774900"},{"1":"2.951177600"},{"1":"-3.188856600"},{"1":"-5.354121700"},{"1":"-3.041071400"},{"1":"0.018116176"},{"1":"-3.231531600"},{"1":"-1.468885200"},{"1":"1.371974800"}],"options":{"columns":{"min":{},"max":[10]},"rows":{"min":[10],"max":[10]},"pages":{}}}
-  </script>
-</div>
+res$data$Documents$PatspecterEmbedding[[1]][1:20]</code></pre>
+<pre><code>##  [1]  0.617129740  0.297668960 -0.852564100  0.367423470 -0.569916300
+##  [6] -0.729070900  1.244275800  0.371231800 -0.341948420  0.677430750
+## [11]  0.819202000 -0.805941300 -0.009899649 -0.324107560 -0.120894090
+## [16] -0.522282960 -0.439736000  0.089114405 -0.082209260 -0.745628700</code></pre>
 </div>
 <div id="search-n-most-similar-documents-compared-to-a-document-in-the-database" class="section level2">
 <h2>Search <em>n</em> most similar documents compared to a document in
 the database</h2>
-<pre class="r"><code># create new query
-query &lt;-  &#39;query ($id:String!, $index:String!, $amount:Int) {
-  SimilaritySearch(index:$index, id:$id, amount:$amount) {
-       id
+<pre class="r"><code>variables &lt;-  fromJSON(&#39;{
+  &quot;model&quot;: &quot;patspecter&quot;,
+  &quot;amount&quot;: 25,
+  &quot;id&quot;: &quot;91081326&quot;,
+  &quot;index&quot;: &quot;patents&quot;,
+  &quot;indices&quot;: [
+    &quot;patents&quot;,
+    &quot;publications&quot;
+  ]
+}&#39;)
+
+
+conn &lt;- GraphqlClient$new(
+  url = URL,
+  headers = list(Authorization = API_KEY)
+)
+query = &#39;query SimilaritySearch($index: String!, $id: String!, $amount: Int, $indices: [String], $model: String!) {
+  SimilaritySearch(
+    index: $index
+    id: $id
+    amount: $amount
+    indices: $indices
+    model: $model
+  ) {
+    id
     score
+    index
     document {
-      documentParts {
-        title
-  
-      }
+      title
+      url
     }
   }
-}&#39;
+}
+&#39;
+
 
 new &lt;- Query$new()$query(&#39;link&#39;, query)
 
-variables = list(id = &quot;123fa2d18fab2ae1752451405f0eac5e273f2695&quot;, 
-                 index =&quot;semanticscholar_cos&quot;,
-                 amount = 5)
+res = conn$exec(new$link, variables = variables) %&gt;% fromJSON(flatten=T)
 
-res = conn$exec(new$link, variables = variables) %&gt;%
-    fromJSON(flatten = F)
-
-res$data$SimilaritySearch$document$documentParts</code></pre>
+res$data$SimilaritySearch</code></pre>
 <div data-pagedtable="false">
 <script data-pagedtable-source type="application/json">
-{"columns":[{"label":[""],"name":["_rn_"],"type":[""],"align":["left"]},{"label":["title"],"name":[1],"type":["chr"],"align":["left"]}],"data":[{"1":"Airbag system for occupants of a vehicle and vehicle provided with such an air bag system.","_rn_":"1"},{"1":"WIRING HARNESS FOR AN AIRBAG MODULE OF A VEHICLE OCCUPANT SAFETY SYSTEM, AIRBAG MODULE, VEHICLE CABLING AND VEHICLE OCCUPANT SAFETY SYSTEM HAVING A WIRING HARNESS OF THIS KIND AND A METHOD OF PRODUCTION","_rn_":"2"},{"1":"Center curtain airbag apparatus for a vehicle","_rn_":"3"},{"1":"Airbag Bestückter seat for a vehicle occupant","_rn_":"4"},{"1":"An arrangement for automatic support a vehicle occupant","_rn_":"5"}],"options":{"columns":{"min":{},"max":[10]},"rows":{"min":[10],"max":[10]},"pages":{}}}
-  </script>
-</div>
-<pre class="r"><code>similar_docs &lt;-  res$data$SimilaritySearch$document$documentParts
-similar_docs &lt;-  cbind(similar_docs, id = res$data$SimilaritySearch$id, score = res$data$SimilaritySearch$score)
-
-similar_docs</code></pre>
-<div data-pagedtable="false">
-<script data-pagedtable-source type="application/json">
-{"columns":[{"label":[""],"name":["_rn_"],"type":[""],"align":["left"]},{"label":["title"],"name":[1],"type":["chr"],"align":["left"]},{"label":["id"],"name":[2],"type":["chr"],"align":["left"]},{"label":["score"],"name":[3],"type":["dbl"],"align":["right"]}],"data":[{"1":"Airbag system for occupants of a vehicle and vehicle provided with such an air bag system.","2":"123fa2d18fab2ae1752451405f0eac5e273f2695","3":"1.0000000","_rn_":"1"},{"1":"WIRING HARNESS FOR AN AIRBAG MODULE OF A VEHICLE OCCUPANT SAFETY SYSTEM, AIRBAG MODULE, VEHICLE CABLING AND VEHICLE OCCUPANT SAFETY SYSTEM HAVING A WIRING HARNESS OF THIS KIND AND A METHOD OF PRODUCTION","2":"e88a357b4d2885e43038461cbe9d97c6dbed3dc7","3":"0.9257551","_rn_":"2"},{"1":"Center curtain airbag apparatus for a vehicle","2":"ddcb07dbdaecf374cf11af530c1829de8c6775a4","3":"0.9168770","_rn_":"3"},{"1":"Airbag Bestückter seat for a vehicle occupant","2":"4cfc283192a7b76d155349ab0f7c650b12f0bc20","3":"0.9118497","_rn_":"4"},{"1":"An arrangement for automatic support a vehicle occupant","2":"c1468aa0fbddcc9ae33b879530b540db9edc11a2","3":"0.9099016","_rn_":"5"}],"options":{"columns":{"min":{},"max":[10]},"rows":{"min":[10],"max":[10]},"pages":{}}}
+{"columns":[{"label":[""],"name":["_rn_"],"type":[""],"align":["left"]},{"label":["id"],"name":[1],"type":["chr"],"align":["left"]},{"label":["index"],"name":[2],"type":["chr"],"align":["left"]},{"label":["score"],"name":[3],"type":["dbl"],"align":["right"]},{"label":["document.title"],"name":[4],"type":["chr"],"align":["left"]},{"label":["document.url"],"name":[5],"type":["chr"],"align":["left"]}],"data":[{"1":"91081326","2":"patents","3":"0.9993445","4":"STRAW AND CHAFF SPREADER FOR COMBINE HARVESTER","5":"https://worldwide.espacenet.com/patent/search?q=US2024164252A1","_rn_":"1"},{"1":"91070411","2":"patents","3":"0.9993255","4":"STRAW AND CHAFF SPREADER FOR COMBINE HARVESTER","5":"https://worldwide.espacenet.com/patent/search?q=CA3182481A1","_rn_":"2"},{"1":"5941872","2":"patents","3":"0.9822080","4":"Combine harvester with grain and chaff separator - has tined rotary threshers positioned above and projecting into sieve","5":"https://worldwide.espacenet.com/patent/search?q=DE2512150A1","_rn_":"3"},{"1":"25768658","2":"patents","3":"0.9821683","4":"Combine harvester with grain and chaff separator - has tined rotary threshers positioned above and projecting into sieve","5":"https://worldwide.espacenet.com/patent/search?q=FR2304275A1","_rn_":"4"},{"1":"24576249","2":"patents","3":"0.9819427","4":"Chaff spreader for combine harvester","5":"https://worldwide.espacenet.com/patent/search?q=US4591102A","_rn_":"5"},{"1":"25223491","2":"patents","3":"0.9818906","4":"Apparatus for chopping and discharging straw from a combine harvester","5":"https://worldwide.espacenet.com/patent/search?q=CA2080969A1","_rn_":"6"},{"1":"25840167","2":"patents","3":"0.9818637","4":"AN ATTACHMENT FOR COMBINES FOR SPREADING CHAFF AND CHOPPED STRAW","5":"https://worldwide.espacenet.com/patent/search?q=EP0230261A1","_rn_":"7"},{"1":"34887817","2":"patents","3":"0.9818602","4":"Combine harvester with a spreader having independent spread width control","5":"https://worldwide.espacenet.com/patent/search?q=US6939221B1","_rn_":"8"},{"1":"35196644","2":"patents","3":"0.9817642","4":"COMBINE HARVESTER WITH A SPREADER HAVING INDEPENDENT SPREAD WIDTH CONTROL","5":"https://worldwide.espacenet.com/patent/search?q=EA008725B1","_rn_":"9"},{"1":"25681599","2":"patents","3":"0.9815571","4":"APPARATUS FOR CHOPPING AND DISCHARGING STRAW FROM A COMBINE HARVESTER","5":"https://worldwide.espacenet.com/patent/search?q=CA2339437A1","_rn_":"10"},{"1":"25855124","2":"patents","3":"0.9814870","4":"Chaff spreader trailer attachment for combine harvesters - has drive roller frame set beneath straw shaker for even spreading","5":"https://worldwide.espacenet.com/patent/search?q=DE3725712A1","_rn_":"11"},{"1":"23642728","2":"patents","3":"0.9813844","4":"Apparatus for chopping and discharging straw from a combine harvester","5":"https://worldwide.espacenet.com/patent/search?q=US5482508A","_rn_":"12"},{"1":"4155547","2":"patents","3":"0.9812510","4":"APPARATUS FOR CHOPPING AND DISCHARGING STRAW FROM A COMBINE HARVESTER","5":"https://worldwide.espacenet.com/patent/search?q=CA2146089A1","_rn_":"13"},{"1":"21696061","2":"patents","3":"0.9811605","4":"STRAW AND CHAFF SPREADER ASSEMBLY","5":"https://worldwide.espacenet.com/patent/search?q=AU2018599A","_rn_":"14"},{"1":"38582471","2":"patents","3":"0.9810165","4":"WASTE STRAW TRANSPORTATION APPARATUS OF COMBINE HARVESTER","5":"https://worldwide.espacenet.com/patent/search?q=JP2007236305A","_rn_":"15"},{"1":"19105420","2":"patents","3":"0.9809900","4":"COMBINE HARVESTER","5":"https://worldwide.espacenet.com/patent/search?q=JP2003088229A","_rn_":"16"},{"1":"5759551","2":"patents","3":"0.9809822","4":"","5":"https://worldwide.espacenet.com/patent/search?q=GB1305521A","_rn_":"17"},{"1":"6248461","2":"patents","3":"0.9807501","4":"COMBINE HARVESTER WITH SUPPLEMENTARY STRAW CHOPPER","5":"https://worldwide.espacenet.com/patent/search?q=DK165541B","_rn_":"18"},{"1":"43939995","2":"patents","3":"0.9807224","4":"COMBINE HARVESTER","5":"https://worldwide.espacenet.com/patent/search?q=JP2011050314A","_rn_":"19"},{"1":"46388316","2":"patents","3":"0.9807049","4":"COMBINE HARVESTER","5":"https://worldwide.espacenet.com/patent/search?q=JP2012095613A","_rn_":"20"},{"1":"25840317","2":"patents","3":"0.9806850","4":"Combine harvester with mounted chopper","5":"https://worldwide.espacenet.com/patent/search?q=DE3620747A1","_rn_":"21"},{"1":"5937940","2":"patents","3":"0.9806461","4":"COMBINE HARVESTERS","5":"https://worldwide.espacenet.com/patent/search?q=GB1536923A","_rn_":"22"},{"1":"38493368","2":"patents","3":"0.9806349","4":"AUGER STRUCTURE OF COMBINE HARVESTER","5":"https://worldwide.espacenet.com/patent/search?q=JP2007215453A","_rn_":"23"},{"1":"23761313","2":"patents","3":"0.9805731","4":"Chaff spreader","5":"https://worldwide.espacenet.com/patent/search?q=US5082186A","_rn_":"24"},{"1":"20287112","2":"patents","3":"0.9805558","4":"COMBINE CHAFF DISCHARGER","5":"https://worldwide.espacenet.com/patent/search?q=WO03071857A1","_rn_":"25"},{"1":"W3169719195","2":"publications","3":"0.9730266","4":"SPECIAL CHARACTERISTICS OF GLEANER COMBINE HARVESTERS","5":"https://openalex.org/works/W3169719195","_rn_":"26"},{"1":"W2016749744","2":"publications","3":"0.9729503","4":"A Wheel Elevator for Sugar Beet Harvesters","5":"https://openalex.org/works/W2016749744","_rn_":"27"},{"1":"W1501118946","2":"publications","3":"0.9728551","4":"Stepwise Construction of the Dedekind-MacNeille Completion (Research Note)","5":"https://openalex.org/works/W1501118946","_rn_":"28"},{"1":"W1588789815","2":"publications","3":"0.9722288","4":"Stochastic Models of Control and Economic Dynamics","5":"https://openalex.org/works/W1588789815","_rn_":"29"},{"1":"W3162661967","2":"publications","3":"0.9714830","4":"Diseño y simulación de un dispositivo vibrador multidireccional para cosechar capulí.","5":"https://openalex.org/works/W3162661967","_rn_":"30"},{"1":"W4289387989","2":"publications","3":"0.9712968","4":"Methods and devices for processing the stemstock of cereal crops harvested using combine stripper harvester technology","5":"https://openalex.org/works/W4289387989","_rn_":"31"},{"1":"W2282359746","2":"publications","3":"0.9712945","4":"Mechanical harvesting equipment for deciduous tree fruits /","5":"https://openalex.org/works/W2282359746","_rn_":"32"},{"1":"W2300233381","2":"publications","3":"0.9709506","4":"Ordering explanations and the structural rules for abduction","5":"https://openalex.org/works/W2300233381","_rn_":"33"},{"1":"W2373457147","2":"publications","3":"0.9705111","4":"Design and Experiment of Self-propelled and Multifunctional Combine Harvester for Corn and Stalk","5":"https://openalex.org/works/W2373457147","_rn_":"34"},{"1":"W2012472937","2":"publications","3":"0.9703091","4":"A CROP HARVESTER FOR FORAGE PLOTS","5":"https://openalex.org/works/W2012472937","_rn_":"35"},{"1":"W3163860912","2":"publications","3":"0.9702023","4":"Strategy for design improvement of a combine harvester","5":"https://openalex.org/works/W3163860912","_rn_":"36"},{"1":"W2022395485","2":"publications","3":"0.9694837","4":"Chaff and Straw Spreader for a Plot Combine","5":"https://openalex.org/works/W2022395485","_rn_":"37"},{"1":"W4296536546","2":"publications","3":"0.9692835","4":"Mechanical Muskmelon Harvesting1","5":"https://openalex.org/works/W4296536546","_rn_":"38"},{"1":"W2965773304","2":"publications","3":"0.9690387","4":"Performance of forage crushers","5":"https://openalex.org/works/W2965773304","_rn_":"39"},{"1":"W2015859135","2":"publications","3":"0.9690375","4":"Harvesters for short rotation coppice: current status and new solutions","5":"https://openalex.org/works/W2015859135","_rn_":"40"},{"1":"W2359669391","2":"publications","3":"0.9690288","4":"The Study on New Header of Corn Combine Reaping Both Corn Stalk and Spike","5":"https://openalex.org/works/W2359669391","_rn_":"41"},{"1":"W2460417944","2":"publications","3":"0.9690006","4":"Chapter 4. Powered Tillage Equipment. Part I. Rotary Tillers","5":"https://openalex.org/works/W2460417944","_rn_":"42"},{"1":"W4237411983","2":"publications","3":"0.9689050","4":"Chaff and Straw Spreader for a Plot Combine","5":"https://openalex.org/works/W4237411983","_rn_":"43"},{"1":"W2082345015","2":"publications","3":"0.9685668","4":"Tree Line Seal for Continuous Mechanical Harvesting of Fruit","5":"https://openalex.org/works/W2082345015","_rn_":"44"},{"1":"W4377022895","2":"publications","3":"0.9681708","4":"MODERNIZATION OF THE APPARATUS FOR THRESHING AND GRINDING MASS","5":"https://openalex.org/works/W4377022895","_rn_":"45"},{"1":"W2093741814","2":"publications","3":"0.9680501","4":"Separation of Soil Clods from Onions Using Impact","5":"https://openalex.org/works/W2093741814","_rn_":"46"},{"1":"W1525911990","2":"publications","3":"0.9678540","4":"Suggestions concerning own in recursive procedure","5":"https://openalex.org/works/W1525911990","_rn_":"47"},{"1":"W4390005219","2":"publications","3":"0.9676799","4":"Combined Unit for Tillage with Pulsed Shock Wave Action","5":"https://openalex.org/works/W4390005219","_rn_":"48"},{"1":"W2922766945","2":"publications","3":"0.9676769","4":"\"Investigation on Wearing of Blade of SandMixer used in Foundry Industry to Enhance theLife of Blade\" : A Review","5":"https://openalex.org/works/W2922766945","_rn_":"49"},{"1":"W612947504","2":"publications","3":"0.9676517","4":"DEVELOPMENT OF A VERTICAL AXIS SHREDDER FOR PINEAPPLE FIELD CLEARING","5":"https://openalex.org/works/W612947504","_rn_":"50"}],"options":{"columns":{"min":{},"max":[10]},"rows":{"min":[10],"max":[10]},"pages":{}}}
   </script>
 </div>
 </div>
@@ -1894,12 +1882,12 @@ for (col in colnames(biblio)){
         record = data.frame(key=col, value=biblio[,c(col)])
         parts = rbind(parts, record)
     }
-    
+
 }
 
 data$parts &lt;-  parts
 
-variables &lt;-  list(data=data)
+variables &lt;-  list(data=data, model=DEFAULT_MODEL)
 variables</code></pre>
 <pre><code>## $data
 ## $data$id
@@ -1911,9 +1899,13 @@ variables</code></pre>
 ## 2 abstract
 ##                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             value
 ## 1                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    Towards A Rigorous Science of Interpretable Machine Learning
-## 2 As machine learning systems become ubiquitous, there has been a surge of interest in interpretable machine learning: systems that provide explanation for their outputs. These explanations are often used to qualitatively assess other criteria such as safety or non-discrimination. However, despite the interest in interpretability, there is very little consensus on what interpretable machine learning is and how it should be measured. In this position paper, we first define interpretability and describe when interpretability is needed (and when it is not). Next, we suggest a taxonomy for rigorous evaluation and expose open questions towards a more rigorous science of interpretable machine learning.</code></pre>
-<pre class="r"><code>query = &#39;query encodeDocument($data: EncodeObject) {
-  encodeDocument(data: $data)
+## 2 As machine learning systems become ubiquitous, there has been a surge of interest in interpretable machine learning: systems that provide explanation for their outputs. These explanations are often used to qualitatively assess other criteria such as safety or non-discrimination. However, despite the interest in interpretability, there is very little consensus on what interpretable machine learning is and how it should be measured. In this position paper, we first define interpretability and describe when interpretability is needed (and when it is not). Next, we suggest a taxonomy for rigorous evaluation and expose open questions towards a more rigorous science of interpretable machine learning.
+## 
+## 
+## $model
+## [1] &quot;patspecter&quot;</code></pre>
+<pre class="r"><code>query = &#39;query encodeDocument($data: EncodeObject, $model: String!) {
+  encodeDocument(data: $data, model: $model)
 }&#39;
 
 new &lt;- Query$new()$query(&#39;link&#39;, query)
@@ -1924,16 +1916,16 @@ res = conn$exec(new$link, variables = variables) %&gt;%
 res$data$encodeDocument %&gt;% as_tibble()</code></pre>
 <div data-pagedtable="false">
 <script data-pagedtable-source type="application/json">
-{"columns":[{"label":["value"],"name":[1],"type":["dbl"],"align":["right"]}],"data":[{"1":"-0.432177930"},{"1":"-2.212762000"},{"1":"2.851030000"},{"1":"0.836691800"},{"1":"-0.594016200"},{"1":"-0.745039760"},{"1":"0.761410950"},{"1":"-1.247110700"},{"1":"-2.538426400"},{"1":"1.218033800"},{"1":"-1.060659800"},{"1":"1.809716300"},{"1":"2.840690600"},{"1":"-0.595701460"},{"1":"-0.890360600"},{"1":"1.580858500"},{"1":"0.634989000"},{"1":"1.252258200"},{"1":"0.545340000"},{"1":"2.527964600"},{"1":"0.024734981"},{"1":"4.061798600"},{"1":"-4.969194000"},{"1":"-1.758062600"},{"1":"0.944229100"},{"1":"-2.579009300"},{"1":"1.625640000"},{"1":"1.773716400"},{"1":"1.232184900"},{"1":"2.390149400"},{"1":"-1.036823900"},{"1":"-1.443813100"},{"1":"4.637259500"},{"1":"-7.624801000"},{"1":"0.555392270"},{"1":"-2.296888400"},{"1":"2.730721200"},{"1":"8.455703000"},{"1":"0.371480100"},{"1":"-2.097060700"},{"1":"-1.565390800"},{"1":"0.675913700"},{"1":"4.497365500"},{"1":"0.003897101"},{"1":"-1.371914100"},{"1":"-1.611756600"},{"1":"0.387169600"},{"1":"4.912705400"},{"1":"-2.812617500"},{"1":"2.195422200"},{"1":"2.992537300"},{"1":"0.970759450"},{"1":"-1.600232100"},{"1":"1.235088700"},{"1":"2.865093500"},{"1":"-3.036585600"},{"1":"0.552425000"},{"1":"1.442377600"},{"1":"0.236201060"},{"1":"-0.415671560"},{"1":"2.922031900"},{"1":"3.448314700"},{"1":"-2.524367000"},{"1":"-3.544592000"},{"1":"1.742648600"},{"1":"-1.244209800"},{"1":"-2.848890000"},{"1":"1.939031600"},{"1":"2.990640900"},{"1":"-0.540383160"},{"1":"-0.725690800"},{"1":"-4.536274000"},{"1":"3.570196200"},{"1":"-1.119748100"},{"1":"2.007323700"},{"1":"3.077533700"},{"1":"-0.716551960"},{"1":"-3.410745600"},{"1":"-0.752713300"},{"1":"0.304381850"},{"1":"-0.153275120"},{"1":"-3.846403400"},{"1":"-0.868352300"},{"1":"4.854120000"},{"1":"2.029225800"},{"1":"0.428814770"},{"1":"-3.702335000"},{"1":"-0.415599580"},{"1":"-0.463224700"},{"1":"-3.416874600"},{"1":"0.840419900"},{"1":"1.621306400"},{"1":"1.328969000"},{"1":"2.644696500"},{"1":"-3.805275000"},{"1":"-2.465005200"},{"1":"3.817655300"},{"1":"-2.911913900"},{"1":"-1.191598000"},{"1":"-1.186127100"},{"1":"1.708264800"},{"1":"1.635709800"},{"1":"2.964788000"},{"1":"2.945333500"},{"1":"5.907361500"},{"1":"0.341032330"},{"1":"3.579144200"},{"1":"1.866025000"},{"1":"3.219562300"},{"1":"-0.023768872"},{"1":"0.764936570"},{"1":"4.629506600"},{"1":"-4.930723000"},{"1":"-3.950918200"},{"1":"2.921357600"},{"1":"1.875858300"},{"1":"-1.417682800"},{"1":"1.781841500"},{"1":"-2.588896800"},{"1":"2.033580800"},{"1":"-1.566731300"},{"1":"0.207898770"},{"1":"0.905072570"},{"1":"-0.516859050"},{"1":"-2.919903000"},{"1":"-1.402096400"},{"1":"1.502401400"},{"1":"-0.229929030"},{"1":"-0.656307400"},{"1":"-2.707768400"},{"1":"3.182395700"},{"1":"1.924283700"},{"1":"1.966789700"},{"1":"-1.797703700"},{"1":"4.776607000"},{"1":"5.187904000"},{"1":"-0.369674440"},{"1":"2.833258900"},{"1":"-4.116455000"},{"1":"-1.757087200"},{"1":"-1.858169000"},{"1":"3.491553000"},{"1":"-0.280642540"},{"1":"-0.661212440"},{"1":"-0.122417520"},{"1":"3.629803200"},{"1":"0.127741320"},{"1":"-4.130220000"},{"1":"4.096945000"},{"1":"2.529258300"},{"1":"3.098684500"},{"1":"-4.856249300"},{"1":"0.928972200"},{"1":"2.033226300"},{"1":"3.709535100"},{"1":"5.305109500"},{"1":"-5.031921400"},{"1":"3.599707400"},{"1":"0.229188050"},{"1":"-1.021802800"},{"1":"-0.236169820"},{"1":"-0.201668980"},{"1":"-5.822954700"},{"1":"-0.236717490"},{"1":"3.370536000"},{"1":"-3.684284000"},{"1":"-1.449964500"},{"1":"1.522757500"},{"1":"-0.716951000"},{"1":"-0.895537440"},{"1":"1.708561200"},{"1":"5.778906000"},{"1":"-1.947589400"},{"1":"1.108894100"},{"1":"-0.418669820"},{"1":"-0.432802920"},{"1":"2.839049600"},{"1":"-1.810128100"},{"1":"-1.577680300"},{"1":"0.131923260"},{"1":"0.806304100"},{"1":"-0.600350600"},{"1":"-3.806719500"},{"1":"0.195249750"},{"1":"-1.051738000"},{"1":"-2.151283000"},{"1":"-0.639009500"},{"1":"-3.372648000"},{"1":"3.540240800"},{"1":"1.064504600"},{"1":"-3.150724400"},{"1":"1.185215700"},{"1":"1.574878700"},{"1":"7.095799400"},{"1":"2.007739000"},{"1":"1.641233800"},{"1":"4.985252000"},{"1":"0.058486193"},{"1":"-2.110740200"},{"1":"1.095438200"},{"1":"0.373837470"},{"1":"1.354456700"},{"1":"-2.175830800"},{"1":"0.379726770"},{"1":"3.977205000"},{"1":"3.750616800"},{"1":"-0.515006900"},{"1":"4.334506000"},{"1":"1.774966800"},{"1":"-3.325645400"},{"1":"1.560432700"},{"1":"0.926858250"},{"1":"-4.115593000"},{"1":"-1.846737700"},{"1":"-1.742462200"},{"1":"0.989602800"},{"1":"-3.271262600"},{"1":"3.661299200"},{"1":"3.326735500"},{"1":"1.422756700"},{"1":"-3.954969600"},{"1":"-2.232658100"},{"1":"1.786540500"},{"1":"-2.156212300"},{"1":"3.031912300"},{"1":"-4.482712000"},{"1":"1.837907400"},{"1":"-2.791880100"},{"1":"0.055136308"},{"1":"-1.283411400"},{"1":"-0.366148170"},{"1":"-0.683921600"},{"1":"-0.276180270"},{"1":"2.483083700"},{"1":"-5.679016600"},{"1":"-0.353387480"},{"1":"-6.131840700"},{"1":"2.618918000"},{"1":"1.937761500"},{"1":"-1.847764800"},{"1":"0.159554660"},{"1":"0.533405400"},{"1":"-1.497621800"},{"1":"0.185559150"},{"1":"-1.366439100"},{"1":"0.414862930"},{"1":"-7.183093500"},{"1":"5.063216700"},{"1":"-1.339863700"},{"1":"-0.433707600"},{"1":"-3.530457300"},{"1":"-1.529402400"},{"1":"-0.704494360"},{"1":"2.492895800"},{"1":"2.029217000"},{"1":"2.023271800"},{"1":"2.560647000"},{"1":"-0.474100380"},{"1":"-0.243704290"},{"1":"0.118135214"},{"1":"-0.621298430"},{"1":"1.946622300"},{"1":"-0.593588600"},{"1":"-0.142332870"},{"1":"0.262314560"},{"1":"-0.914802250"},{"1":"-3.641648800"},{"1":"-2.984053900"},{"1":"-2.856797000"},{"1":"1.036093700"},{"1":"2.641814000"},{"1":"-2.025666700"},{"1":"1.715187400"},{"1":"-3.407200300"},{"1":"1.220349400"},{"1":"-4.878247700"},{"1":"-5.123152700"},{"1":"-0.718062340"},{"1":"0.722588000"},{"1":"2.115651600"},{"1":"1.325299500"},{"1":"1.106575700"},{"1":"1.979984200"},{"1":"-2.202114600"},{"1":"-1.617551300"},{"1":"-5.318128000"},{"1":"2.385758400"},{"1":"2.213827000"},{"1":"3.522142000"},{"1":"-1.000158900"},{"1":"-1.259103700"},{"1":"7.949863400"},{"1":"-3.046180200"},{"1":"-1.191176200"},{"1":"0.377710460"},{"1":"2.014704200"},{"1":"1.138752300"},{"1":"0.751473370"},{"1":"-1.146273100"},{"1":"-0.417819680"},{"1":"-1.670667000"},{"1":"3.223841200"},{"1":"2.862225800"},{"1":"-1.326185800"},{"1":"-1.049613400"},{"1":"5.206469000"},{"1":"2.876695900"},{"1":"-1.455665500"},{"1":"-0.357049050"},{"1":"-1.180317200"},{"1":"2.935921700"},{"1":"0.575502300"},{"1":"1.369867900"},{"1":"-5.193910000"},{"1":"-0.193283320"},{"1":"1.771919600"},{"1":"-0.019402593"},{"1":"3.047145000"},{"1":"-0.786165300"},{"1":"3.196752500"},{"1":"1.226605700"},{"1":"-0.775399150"},{"1":"-1.731270400"},{"1":"-4.656376400"},{"1":"-3.195542600"},{"1":"1.590999100"},{"1":"4.743855500"},{"1":"1.074007300"},{"1":"3.501401200"},{"1":"-3.912793400"},{"1":"-0.651010630"},{"1":"2.966803600"},{"1":"0.759626450"},{"1":"3.814579200"},{"1":"-3.007362400"},{"1":"-5.616946000"},{"1":"1.999008200"},{"1":"-1.371269500"},{"1":"3.763673000"},{"1":"2.444052200"},{"1":"-2.322612300"},{"1":"4.567400500"},{"1":"-0.865340650"},{"1":"-1.722101600"},{"1":"-1.641526000"},{"1":"2.440618000"},{"1":"3.497650000"},{"1":"-4.008700000"},{"1":"0.852032300"},{"1":"-1.454592600"},{"1":"0.170063320"},{"1":"1.894068500"},{"1":"2.554089300"},{"1":"-4.010590000"},{"1":"5.733480500"},{"1":"3.333210000"},{"1":"5.024380700"},{"1":"5.150465000"},{"1":"-0.649454950"},{"1":"1.115354200"},{"1":"0.133590250"},{"1":"-3.997861000"},{"1":"0.737325430"},{"1":"2.704817000"},{"1":"-3.001164400"},{"1":"-3.149968100"},{"1":"7.037190400"},{"1":"-5.125103000"},{"1":"-1.073798900"},{"1":"-3.427539600"},{"1":"-2.008993000"},{"1":"-3.375979000"},{"1":"-2.441836000"},{"1":"1.968010000"},{"1":"-1.974469300"},{"1":"-3.383937600"},{"1":"-3.003875700"},{"1":"-5.479476500"},{"1":"5.466534600"},{"1":"1.296034900"},{"1":"1.613669500"},{"1":"3.133005600"},{"1":"-1.616684900"},{"1":"1.424119800"},{"1":"0.493290600"},{"1":"3.582457500"},{"1":"-2.627396600"},{"1":"0.171662210"},{"1":"0.457037400"},{"1":"2.595885800"},{"1":"-1.898120600"},{"1":"-0.803564370"},{"1":"3.876010400"},{"1":"0.705008200"},{"1":"-1.881040800"},{"1":"-2.196452900"},{"1":"-1.336209800"},{"1":"-1.862264600"},{"1":"-2.518027300"},{"1":"2.256991400"},{"1":"0.231981580"},{"1":"3.028354200"},{"1":"1.984503700"},{"1":"-2.248786000"},{"1":"-2.681106600"},{"1":"-0.634485240"},{"1":"2.116820300"},{"1":"-1.698054800"},{"1":"-0.346411400"},{"1":"0.747207100"},{"1":"-2.906723000"},{"1":"-0.845192130"},{"1":"-0.635709460"},{"1":"-1.565962000"},{"1":"1.426247700"},{"1":"-0.234385250"},{"1":"0.420040200"},{"1":"3.091441900"},{"1":"1.736952200"},{"1":"-0.394673400"},{"1":"-0.723838270"},{"1":"0.936747200"},{"1":"7.347709700"},{"1":"-1.654342500"},{"1":"-0.783357000"},{"1":"1.894236600"},{"1":"3.306517800"},{"1":"2.584900100"},{"1":"-0.822881340"},{"1":"3.508689900"},{"1":"1.960977300"},{"1":"3.686139600"},{"1":"1.246268600"},{"1":"0.658664500"},{"1":"2.721903800"},{"1":"-1.162266500"},{"1":"4.298899700"},{"1":"2.110414000"},{"1":"1.850286700"},{"1":"-3.568517200"},{"1":"-3.196593300"},{"1":"-2.080577900"},{"1":"-2.246945900"},{"1":"1.616029100"},{"1":"-1.605202000"},{"1":"3.164710000"},{"1":"3.612234600"},{"1":"3.359715000"},{"1":"-0.063837030"},{"1":"-1.868948000"},{"1":"5.013728000"},{"1":"0.208913240"},{"1":"-2.458572600"},{"1":"1.069791800"},{"1":"1.999249100"},{"1":"-1.415265800"},{"1":"1.448188300"},{"1":"-1.507349400"},{"1":"-2.014617700"},{"1":"0.926467960"},{"1":"-5.002443000"},{"1":"3.183370400"},{"1":"-0.944065450"},{"1":"-3.092626800"},{"1":"2.927829300"},{"1":"1.391498300"},{"1":"-0.381184670"},{"1":"-2.505639300"},{"1":"-1.536848800"},{"1":"0.279972970"},{"1":"1.913051100"},{"1":"0.463482680"},{"1":"2.238532500"},{"1":"0.819884300"},{"1":"2.380063800"},{"1":"2.626966700"},{"1":"2.625502600"},{"1":"2.660718400"},{"1":"0.035873413"},{"1":"-4.445381600"},{"1":"-5.008934500"},{"1":"-3.294442000"},{"1":"5.663918000"},{"1":"-1.615267500"},{"1":"-0.840070900"},{"1":"4.542021000"},{"1":"-0.299212600"},{"1":"0.686338250"},{"1":"0.994976160"},{"1":"1.099066400"},{"1":"-2.452165100"},{"1":"1.776453700"},{"1":"2.013780600"},{"1":"3.280281800"},{"1":"-1.304512400"},{"1":"0.669696330"},{"1":"-3.626517000"},{"1":"3.025233000"},{"1":"-3.347263000"},{"1":"0.689618000"},{"1":"-0.188309070"},{"1":"-2.453252300"},{"1":"0.799466800"},{"1":"-2.022591000"},{"1":"-3.077314000"},{"1":"7.701300000"},{"1":"0.163789100"},{"1":"3.287529000"},{"1":"-1.813857700"},{"1":"-1.453631200"},{"1":"-4.584482000"},{"1":"-0.096068620"},{"1":"-5.904070400"},{"1":"1.113853200"},{"1":"-1.740740300"},{"1":"-2.399823700"},{"1":"0.541599330"},{"1":"0.080664575"},{"1":"-2.334839800"},{"1":"0.473399700"},{"1":"-0.241920680"},{"1":"-2.173949000"},{"1":"-2.254300400"},{"1":"-0.745758100"},{"1":"-1.565112600"},{"1":"0.712912200"},{"1":"-1.609891800"},{"1":"0.846639750"},{"1":"0.074773190"},{"1":"2.403407600"},{"1":"2.817741000"},{"1":"5.696697000"},{"1":"-1.118347200"},{"1":"-4.182776500"},{"1":"-2.016312600"},{"1":"-1.607083100"},{"1":"-0.527215500"},{"1":"3.652507300"},{"1":"-0.568170130"},{"1":"0.241088510"},{"1":"-0.060577005"},{"1":"1.721483500"},{"1":"-1.438882400"},{"1":"1.790727500"},{"1":"-0.438375440"},{"1":"2.494892600"},{"1":"-5.029430400"},{"1":"-6.123395400"},{"1":"-2.504243100"},{"1":"1.236410400"},{"1":"3.309194600"},{"1":"-1.671157100"},{"1":"2.410262000"},{"1":"1.444443500"},{"1":"-3.500781000"},{"1":"-3.808486700"},{"1":"-1.202134600"},{"1":"-1.430240600"},{"1":"-2.089612000"},{"1":"-0.454932270"},{"1":"-1.239678600"},{"1":"-1.417468900"},{"1":"1.475050700"},{"1":"1.112142300"},{"1":"0.958322100"},{"1":"-0.905751000"},{"1":"1.386625900"},{"1":"2.880451700"},{"1":"-0.008369833"},{"1":"-3.034501800"},{"1":"0.072897315"},{"1":"-2.019601000"},{"1":"3.510614400"},{"1":"-0.994365900"},{"1":"1.365101300"},{"1":"2.906704400"},{"1":"6.765460500"},{"1":"-0.594101500"},{"1":"1.349768600"},{"1":"-0.118459400"},{"1":"1.305733000"},{"1":"-1.289257600"},{"1":"-0.147197460"},{"1":"-2.788002700"},{"1":"1.735148400"},{"1":"-3.216062000"},{"1":"-2.360678700"},{"1":"1.822607900"},{"1":"-6.526194600"},{"1":"-0.467319820"},{"1":"-3.536551500"},{"1":"1.930325000"},{"1":"-2.153984000"},{"1":"-0.448314760"},{"1":"1.860382200"},{"1":"-0.300885680"},{"1":"0.767688160"},{"1":"-0.387652670"},{"1":"1.208449200"},{"1":"3.096240500"},{"1":"-0.627711700"},{"1":"3.907077600"},{"1":"3.821161000"},{"1":"0.496135380"},{"1":"-0.505155740"},{"1":"-0.517394400"},{"1":"3.470418500"},{"1":"-0.042728490"},{"1":"1.231887600"},{"1":"3.063220500"},{"1":"-4.439130300"},{"1":"-0.058942080"},{"1":"9.329137000"},{"1":"0.725874900"},{"1":"-1.339627400"},{"1":"-4.118623000"},{"1":"1.768798200"},{"1":"-5.052094500"},{"1":"-2.427580800"},{"1":"-0.612446600"},{"1":"-0.452477040"},{"1":"0.051938890"},{"1":"1.994805800"},{"1":"-0.633190930"},{"1":"-3.141857600"},{"1":"-0.368501720"},{"1":"-0.208367940"},{"1":"1.170767100"},{"1":"-1.123611700"},{"1":"1.905453000"},{"1":"3.594412800"},{"1":"1.976600900"},{"1":"-1.250472100"},{"1":"-0.208764120"},{"1":"-3.428328300"},{"1":"-2.772957800"},{"1":"-0.855068800"},{"1":"0.181284040"},{"1":"0.653629300"},{"1":"1.210600400"},{"1":"-6.345237700"},{"1":"-1.238244800"},{"1":"0.777931100"},{"1":"2.303103000"},{"1":"0.944613460"},{"1":"-1.257671100"},{"1":"-2.495873200"},{"1":"0.867581200"},{"1":"5.205622000"},{"1":"-1.404993900"},{"1":"-2.011397000"},{"1":"-1.366735000"},{"1":"1.448317000"},{"1":"0.333245870"},{"1":"-5.044718700"},{"1":"3.002990500"},{"1":"-2.442309100"},{"1":"-2.358129700"},{"1":"5.171993700"},{"1":"-0.664036300"},{"1":"-0.576322100"},{"1":"0.919086200"},{"1":"-1.265543100"},{"1":"-0.383349750"},{"1":"-2.805470700"},{"1":"-1.798196300"},{"1":"1.871836700"},{"1":"-2.206327700"},{"1":"-1.807552100"},{"1":"-2.875661800"},{"1":"0.042739026"},{"1":"-0.618646400"},{"1":"1.036120700"},{"1":"-1.785865700"},{"1":"2.537569000"},{"1":"-7.705892600"},{"1":"0.592533230"},{"1":"-3.421294000"},{"1":"-1.256629700"},{"1":"-0.738886830"},{"1":"5.994419000"},{"1":"4.567430500"},{"1":"3.405086800"},{"1":"3.434823500"},{"1":"-2.851884400"},{"1":"-4.893005400"},{"1":"0.340376440"},{"1":"-3.502579700"},{"1":"1.233228100"},{"1":"0.146800940"},{"1":"-1.711601300"},{"1":"4.386081700"},{"1":"2.314520000"},{"1":"-3.866613000"},{"1":"-3.071807000"},{"1":"-0.348023530"},{"1":"3.090503200"},{"1":"-2.009998300"},{"1":"2.349623700"},{"1":"-5.589617000"},{"1":"-3.003313000"},{"1":"-1.607408300"},{"1":"-2.510807800"},{"1":"1.234241100"},{"1":"6.546350500"},{"1":"0.911375300"},{"1":"-1.650236400"},{"1":"-3.469963800"},{"1":"-1.304604300"},{"1":"2.472402600"},{"1":"-5.096040000"},{"1":"-0.405149550"},{"1":"3.160631000"},{"1":"1.738851400"},{"1":"-1.703989500"},{"1":"-2.790844000"},{"1":"1.524465400"},{"1":"1.268300800"},{"1":"-1.468512300"},{"1":"-2.384758000"},{"1":"-6.045655300"},{"1":"-0.518171550"},{"1":"3.534588300"},{"1":"-2.137774200"},{"1":"-0.909051800"},{"1":"0.178081750"},{"1":"0.259292130"},{"1":"1.400902000"},{"1":"1.851978400"},{"1":"4.237005700"},{"1":"5.629943400"},{"1":"3.723412000"},{"1":"-0.763598440"},{"1":"-1.155565300"},{"1":"-0.327337440"},{"1":"-4.248589500"},{"1":"-3.462180600"},{"1":"1.713606600"},{"1":"2.232827700"},{"1":"-2.854623000"},{"1":"-0.291249220"},{"1":"-3.871689600"},{"1":"2.390236000"},{"1":"-1.429899100"},{"1":"1.220629500"},{"1":"-2.043984200"},{"1":"0.211211920"},{"1":"0.900400160"},{"1":"0.418046300"},{"1":"2.951955800"},{"1":"-2.456173200"},{"1":"3.030969900"},{"1":"-3.192273100"},{"1":"-5.940140000"},{"1":"-0.813081260"},{"1":"5.342329000"},{"1":"-1.320824400"},{"1":"-0.136074360"},{"1":"-4.193568000"},{"1":"3.173370600"},{"1":"-5.103134000"},{"1":"1.529707800"},{"1":"1.092098800"},{"1":"-3.449286700"},{"1":"-1.792092000"},{"1":"3.380588500"},{"1":"-2.664391000"},{"1":"1.722626400"}],"options":{"columns":{"min":{},"max":[10]},"rows":{"min":[10],"max":[10]},"pages":{}}}
+{"columns":[{"label":["value"],"name":[1],"type":["dbl"],"align":["right"]}],"data":[{"1":"-0.151732130"},{"1":"0.394669150"},{"1":"-0.265446750"},{"1":"0.109206400"},{"1":"-0.097115465"},{"1":"-1.235346100"},{"1":"1.330478100"},{"1":"0.702194630"},{"1":"-0.069137870"},{"1":"0.328064300"},{"1":"0.159326870"},{"1":"-0.231669550"},{"1":"-0.373367340"},{"1":"-0.349326700"},{"1":"-0.579976800"},{"1":"0.075430065"},{"1":"-0.288567800"},{"1":"0.500122370"},{"1":"-0.401168230"},{"1":"-0.227277200"},{"1":"0.432777400"},{"1":"0.193138270"},{"1":"-0.625261250"},{"1":"0.353351900"},{"1":"0.659714600"},{"1":"0.559827860"},{"1":"-0.203487780"},{"1":"1.092551700"},{"1":"0.075485550"},{"1":"0.956321060"},{"1":"0.600682800"},{"1":"-0.799024500"},{"1":"0.365857930"},{"1":"0.081337210"},{"1":"-0.886828840"},{"1":"0.035699174"},{"1":"0.357870070"},{"1":"-0.658692600"},{"1":"-0.969562950"},{"1":"0.670260400"},{"1":"-0.566367200"},{"1":"0.154651630"},{"1":"0.824207400"},{"1":"-1.503034700"},{"1":"-0.378195800"},{"1":"1.129497800"},{"1":"-0.125255510"},{"1":"0.718759300"},{"1":"-0.187862380"},{"1":"-0.011435427"},{"1":"1.118258800"},{"1":"-1.277310000"},{"1":"0.687596300"},{"1":"1.091956400"},{"1":"0.457299920"},{"1":"0.520552160"},{"1":"-0.878961440"},{"1":"-0.818075540"},{"1":"1.089519700"},{"1":"0.281116800"},{"1":"-0.912853360"},{"1":"0.327768530"},{"1":"0.182548170"},{"1":"-1.311801200"},{"1":"1.533034100"},{"1":"-0.013770792"},{"1":"0.104948890"},{"1":"0.291486200"},{"1":"0.183290170"},{"1":"1.109154800"},{"1":"0.976315200"},{"1":"-0.322075100"},{"1":"0.315087080"},{"1":"0.390125800"},{"1":"1.632183600"},{"1":"0.540066240"},{"1":"-0.479936780"},{"1":"0.904769960"},{"1":"-0.579733400"},{"1":"-0.086041690"},{"1":"-0.508257000"},{"1":"-0.010270868"},{"1":"0.782929000"},{"1":"-0.289615630"},{"1":"-1.061485500"},{"1":"0.815867900"},{"1":"0.337774460"},{"1":"0.513559940"},{"1":"0.606938100"},{"1":"1.075687900"},{"1":"0.325532530"},{"1":"0.777690400"},{"1":"-0.124623425"},{"1":"-0.112850570"},{"1":"-1.091166900"},{"1":"0.652671700"},{"1":"-1.110215300"},{"1":"-0.052684743"},{"1":"-0.294151460"},{"1":"0.736132400"},{"1":"0.067951520"},{"1":"0.316114750"},{"1":"-0.737705500"},{"1":"-0.074521760"},{"1":"1.719346900"},{"1":"0.338094350"},{"1":"0.926762300"},{"1":"-1.290127800"},{"1":"-0.283954740"},{"1":"0.383091720"},{"1":"-0.449812440"},{"1":"-0.954412300"},{"1":"-0.029455362"},{"1":"-1.114572500"},{"1":"-1.031988500"},{"1":"-0.808881500"},{"1":"0.115822650"},{"1":"0.635263440"},{"1":"-0.484428850"},{"1":"1.352866000"},{"1":"-0.088190004"},{"1":"-0.427995030"},{"1":"-0.190971020"},{"1":"0.689837500"},{"1":"0.747316840"},{"1":"-0.011695568"},{"1":"-0.266305540"},{"1":"0.488307330"},{"1":"0.747165800"},{"1":"-0.336113900"},{"1":"-0.291532300"},{"1":"-1.255371600"},{"1":"0.424703450"},{"1":"-0.161485520"},{"1":"0.607459550"},{"1":"0.562325600"},{"1":"-0.596295540"},{"1":"-1.126952600"},{"1":"-1.386889300"},{"1":"0.495052200"},{"1":"-0.794204300"},{"1":"0.273967330"},{"1":"1.421708700"},{"1":"1.338918900"},{"1":"-0.688375600"},{"1":"0.498407190"},{"1":"-0.717118440"},{"1":"-0.791437200"},{"1":"0.949482860"},{"1":"0.203407060"},{"1":"-0.053357508"},{"1":"-0.292584330"},{"1":"-0.870426100"},{"1":"0.925013200"},{"1":"0.586937670"},{"1":"-0.570370300"},{"1":"-1.035397000"},{"1":"0.015751489"},{"1":"-1.276724600"},{"1":"0.071790226"},{"1":"0.491154160"},{"1":"-0.598219450"},{"1":"1.509664400"},{"1":"-1.294122200"},{"1":"-0.972791140"},{"1":"0.399488900"},{"1":"0.540964100"},{"1":"-0.360247370"},{"1":"0.687251000"},{"1":"0.461565100"},{"1":"-0.233072770"},{"1":"-0.119995970"},{"1":"-0.234071460"},{"1":"0.677182440"},{"1":"0.452882740"},{"1":"-0.484832730"},{"1":"-0.552982150"},{"1":"-0.914662300"},{"1":"-0.554034650"},{"1":"0.113516144"},{"1":"-0.865084500"},{"1":"0.831381200"},{"1":"0.755490900"},{"1":"-0.340867000"},{"1":"0.153768750"},{"1":"-0.867881060"},{"1":"-0.252475300"},{"1":"-0.368012040"},{"1":"-0.678288040"},{"1":"-0.320774140"},{"1":"1.160779500"},{"1":"-0.718111040"},{"1":"0.506116800"},{"1":"-1.395551900"},{"1":"-0.637274500"},{"1":"0.136518330"},{"1":"-0.100934910"},{"1":"-0.481233500"},{"1":"-0.499592800"},{"1":"0.414320620"},{"1":"-0.405292030"},{"1":"0.753683150"},{"1":"-0.805778900"},{"1":"-1.557044500"},{"1":"-0.442677440"},{"1":"-0.017588150"},{"1":"-1.226867100"},{"1":"-0.020311717"},{"1":"0.021279132"},{"1":"0.560535500"},{"1":"-1.542802600"},{"1":"-0.008656870"},{"1":"0.325743650"},{"1":"0.164037150"},{"1":"-0.372950670"},{"1":"0.744388340"},{"1":"0.128224180"},{"1":"0.424913530"},{"1":"-0.178308600"},{"1":"0.208248900"},{"1":"0.689037740"},{"1":"-0.114753395"},{"1":"0.573568200"},{"1":"0.411014850"},{"1":"0.022122245"},{"1":"0.717518450"},{"1":"-1.181708800"},{"1":"1.091622100"},{"1":"-0.149184110"},{"1":"0.269953460"},{"1":"-0.505823500"},{"1":"-1.205027200"},{"1":"0.059195020"},{"1":"0.644086200"},{"1":"-0.539202750"},{"1":"-0.340395630"},{"1":"1.010366800"},{"1":"-0.710247700"},{"1":"-0.920621300"},{"1":"-0.006954036"},{"1":"-0.044428002"},{"1":"0.980822500"},{"1":"-0.503576760"},{"1":"0.417249600"},{"1":"0.590463500"},{"1":"-0.347174850"},{"1":"0.155839580"},{"1":"0.842472200"},{"1":"1.098897900"},{"1":"0.797284700"},{"1":"1.117461300"},{"1":"0.384662400"},{"1":"0.238781050"},{"1":"-0.277434050"},{"1":"0.265549700"},{"1":"1.355483800"},{"1":"0.838412100"},{"1":"0.715299300"},{"1":"1.222279900"},{"1":"-0.714214700"},{"1":"-0.241874770"},{"1":"-0.771947740"},{"1":"0.447269980"},{"1":"1.333468900"},{"1":"-0.596440800"},{"1":"-0.360449100"},{"1":"-0.071893100"},{"1":"-1.314632000"},{"1":"-0.775056900"},{"1":"0.709631600"},{"1":"0.165114160"},{"1":"0.050452500"},{"1":"-0.164550650"},{"1":"-0.834976800"},{"1":"0.952819050"},{"1":"0.553116560"},{"1":"1.385915000"},{"1":"-0.881982800"},{"1":"-0.234074130"},{"1":"-1.003869300"},{"1":"0.055068515"},{"1":"-1.199636300"},{"1":"0.285761120"},{"1":"0.260038050"},{"1":"-0.896451400"},{"1":"-0.607445500"},{"1":"1.157049000"},{"1":"-0.069899910"},{"1":"0.889611660"},{"1":"-0.955459500"},{"1":"0.894079450"},{"1":"-0.501945200"},{"1":"-0.322295520"},{"1":"0.699597400"},{"1":"0.382881340"},{"1":"-0.379858430"},{"1":"-0.743240240"},{"1":"-0.251078070"},{"1":"0.220396440"},{"1":"-0.485294880"},{"1":"0.035749342"},{"1":"-0.264193560"},{"1":"0.061663568"},{"1":"0.470005750"},{"1":"-1.034643200"},{"1":"0.596719000"},{"1":"0.458156380"},{"1":"0.682616800"},{"1":"0.786334400"},{"1":"-0.282133550"},{"1":"0.821336700"},{"1":"-0.713043630"},{"1":"0.682412150"},{"1":"-0.898761100"},{"1":"-0.401810080"},{"1":"0.350306270"},{"1":"-1.247627000"},{"1":"-0.650339960"},{"1":"1.100789200"},{"1":"-0.494818000"},{"1":"-0.358802080"},{"1":"-0.131375830"},{"1":"0.190552120"},{"1":"-0.744410100"},{"1":"-0.594426750"},{"1":"0.652007700"},{"1":"0.116219510"},{"1":"0.496003630"},{"1":"0.016420634"},{"1":"-0.024134010"},{"1":"-0.079472260"},{"1":"-0.340853200"},{"1":"0.331797300"},{"1":"0.314646570"},{"1":"0.745488350"},{"1":"0.443379880"},{"1":"0.682253240"},{"1":"0.083858825"},{"1":"0.483849640"},{"1":"-0.853796800"},{"1":"-0.489381640"},{"1":"0.122862980"},{"1":"-0.105508460"},{"1":"-0.438357030"},{"1":"0.390298870"},{"1":"-0.809604700"},{"1":"-0.351419540"},{"1":"-0.346411080"},{"1":"-0.698115000"},{"1":"-0.428985950"},{"1":"-0.264146150"},{"1":"0.865209100"},{"1":"-0.861930400"},{"1":"0.169752790"},{"1":"-0.958845730"},{"1":"-1.231129200"},{"1":"-0.602419260"},{"1":"-0.452848320"},{"1":"0.421144750"},{"1":"-0.144961580"},{"1":"-0.942412260"},{"1":"-0.575088000"},{"1":"0.702536170"},{"1":"0.389900540"},{"1":"0.679881900"},{"1":"0.432606430"},{"1":"1.134504100"},{"1":"-0.778396550"},{"1":"0.340735520"},{"1":"-0.665073500"},{"1":"0.497482700"},{"1":"0.405763920"},{"1":"-0.816837400"},{"1":"0.712352450"},{"1":"-0.915544150"},{"1":"-0.383465230"},{"1":"0.136374830"},{"1":"-1.018051500"},{"1":"0.714573500"},{"1":"0.457321300"},{"1":"1.001796800"},{"1":"-0.639095660"},{"1":"-0.301230850"},{"1":"-0.013506557"},{"1":"1.394769400"},{"1":"-0.799864000"},{"1":"-0.123209440"},{"1":"-0.324210020"},{"1":"0.582139970"},{"1":"0.445115920"},{"1":"0.730231640"},{"1":"0.137095100"},{"1":"-0.112129980"},{"1":"0.665216400"},{"1":"0.329696200"},{"1":"0.503353060"},{"1":"0.566723300"},{"1":"-0.320653860"},{"1":"1.281045200"},{"1":"0.591337560"},{"1":"1.067011200"},{"1":"0.449562670"},{"1":"-1.695818400"},{"1":"0.166377590"},{"1":"-1.996840000"},{"1":"-1.515165800"},{"1":"0.569130200"},{"1":"0.807456500"},{"1":"0.123723580"},{"1":"0.226495900"},{"1":"-0.080481710"},{"1":"0.773587400"},{"1":"0.706633400"},{"1":"-0.931366400"},{"1":"0.193420050"},{"1":"-0.025271260"},{"1":"-0.018559925"},{"1":"-0.061557315"},{"1":"-0.002717008"},{"1":"1.105389800"},{"1":"-0.826129000"},{"1":"0.488025300"},{"1":"10.689091000"},{"1":"0.649764360"},{"1":"-0.466865630"},{"1":"0.925491400"},{"1":"1.242104200"},{"1":"-0.060946148"},{"1":"-0.514063500"},{"1":"0.598606100"},{"1":"-0.693388040"},{"1":"-0.145688980"},{"1":"0.730489900"},{"1":"0.626986000"},{"1":"0.718147460"},{"1":"1.368415200"},{"1":"0.106400640"},{"1":"-0.114127494"},{"1":"-1.086266900"},{"1":"0.614956400"},{"1":"0.346149440"},{"1":"-0.729732000"},{"1":"-0.403414200"},{"1":"-0.246699350"},{"1":"0.788226600"},{"1":"1.519347200"},{"1":"0.911451200"},{"1":"0.954922850"},{"1":"0.715474000"},{"1":"-0.406417520"},{"1":"1.174276400"},{"1":"-0.075530020"},{"1":"0.820818540"},{"1":"-0.812498800"},{"1":"0.880090900"},{"1":"1.233659300"},{"1":"-0.706835570"},{"1":"-0.549111600"},{"1":"-0.613647500"},{"1":"-1.024988400"},{"1":"-0.145746080"},{"1":"0.576985900"},{"1":"-1.870446900"},{"1":"0.319787300"},{"1":"0.303491000"},{"1":"0.480168640"},{"1":"-1.106813700"},{"1":"-0.219907150"},{"1":"-0.230568660"},{"1":"0.220673700"},{"1":"-0.924949770"},{"1":"-0.251894900"},{"1":"-0.616902650"},{"1":"0.698241300"},{"1":"0.684997700"},{"1":"0.663598240"},{"1":"-0.291598650"},{"1":"-0.444932900"},{"1":"-0.102698930"},{"1":"0.928293000"},{"1":"0.169640570"},{"1":"-0.344753680"},{"1":"-0.461794970"},{"1":"-1.084595800"},{"1":"0.112371504"},{"1":"1.183398000"},{"1":"-0.027766868"},{"1":"0.019284613"},{"1":"-0.069825220"},{"1":"0.668578150"},{"1":"0.619322000"},{"1":"0.659128600"},{"1":"-0.462582680"},{"1":"0.482945620"},{"1":"0.443737200"},{"1":"-0.346173080"},{"1":"0.090249860"},{"1":"-0.192681220"},{"1":"-0.938418700"},{"1":"-0.893716450"},{"1":"-0.627379900"},{"1":"-0.718334260"},{"1":"1.212282500"},{"1":"-0.620884660"},{"1":"-1.388447600"},{"1":"0.904959500"},{"1":"-0.225686180"},{"1":"-1.068488600"},{"1":"-0.755224940"},{"1":"-0.953170200"},{"1":"-0.542951170"},{"1":"0.900192300"},{"1":"-1.457445300"},{"1":"-1.618990900"},{"1":"-0.103696800"},{"1":"0.297780780"},{"1":"0.249819000"},{"1":"0.472232850"},{"1":"0.660760900"},{"1":"-1.212170200"},{"1":"-0.243351820"},{"1":"0.141435600"},{"1":"0.089075334"},{"1":"-0.247395190"},{"1":"0.551220500"},{"1":"-1.042912700"},{"1":"0.449531940"},{"1":"0.361410600"},{"1":"-0.237166450"},{"1":"0.735066650"},{"1":"0.102599050"},{"1":"-0.919850230"},{"1":"-0.846910000"},{"1":"-0.330467520"},{"1":"0.275574740"},{"1":"-1.079056700"},{"1":"0.159043310"},{"1":"-0.434339580"},{"1":"-0.837357640"},{"1":"1.279519800"},{"1":"0.171019420"},{"1":"-0.130332160"},{"1":"1.024614200"},{"1":"0.164732070"},{"1":"-0.332977770"},{"1":"0.648445670"},{"1":"-1.229168800"},{"1":"0.160225760"},{"1":"0.768182040"},{"1":"-0.353956640"},{"1":"-1.101903400"},{"1":"0.567102600"},{"1":"0.517283000"},{"1":"-0.241221800"},{"1":"-0.077498610"},{"1":"0.538783600"},{"1":"0.519900500"},{"1":"-1.309028600"},{"1":"0.878191230"},{"1":"-1.715748800"},{"1":"0.375347350"},{"1":"0.430009480"},{"1":"-0.108905040"},{"1":"-0.955393800"},{"1":"-0.229865220"},{"1":"0.014100805"},{"1":"0.245503700"},{"1":"0.391907540"},{"1":"0.456691240"},{"1":"-0.443740870"},{"1":"0.329321740"},{"1":"0.275243700"},{"1":"-0.206469070"},{"1":"-0.369446070"},{"1":"-0.845018200"},{"1":"0.015216955"},{"1":"0.674307500"},{"1":"-0.528423550"},{"1":"0.485148340"},{"1":"1.115017500"},{"1":"0.849436900"},{"1":"0.466039720"},{"1":"-0.242929400"},{"1":"0.894640560"},{"1":"0.146615180"},{"1":"-0.184866590"},{"1":"0.646958230"},{"1":"-0.859071700"},{"1":"-1.118314500"},{"1":"-0.194828000"},{"1":"-0.673678760"},{"1":"-0.927637930"},{"1":"0.162772610"},{"1":"-1.103716000"},{"1":"-0.518314300"},{"1":"-1.182066400"},{"1":"0.221804470"},{"1":"0.384538860"},{"1":"-1.089616200"},{"1":"0.290376780"},{"1":"0.076307920"},{"1":"-0.147423160"},{"1":"-0.565196340"},{"1":"0.157485650"},{"1":"-0.612101140"},{"1":"0.692738200"},{"1":"0.449852650"},{"1":"-0.153190550"},{"1":"-0.666959200"},{"1":"0.206491490"},{"1":"0.023198897"},{"1":"0.722176970"},{"1":"0.767686300"},{"1":"-0.749117200"},{"1":"-0.984905060"},{"1":"-0.949343500"},{"1":"0.810667160"},{"1":"0.705296200"},{"1":"-0.187257350"},{"1":"-0.412665870"},{"1":"0.637079100"},{"1":"-0.435554120"},{"1":"0.621749940"},{"1":"-0.287838130"},{"1":"0.760588800"},{"1":"-0.640789000"},{"1":"0.238043340"},{"1":"0.858713000"},{"1":"-0.753357800"},{"1":"-0.094107830"},{"1":"0.434553030"},{"1":"0.279135730"},{"1":"-0.251902600"},{"1":"0.219114120"},{"1":"-0.507518400"},{"1":"0.186373300"},{"1":"-0.733468400"},{"1":"0.170909170"},{"1":"-0.917827200"},{"1":"-0.134449660"},{"1":"0.088448240"},{"1":"-0.867346900"},{"1":"-0.486192050"},{"1":"-1.061784400"},{"1":"-0.619345500"},{"1":"0.552378100"},{"1":"-0.254772340"},{"1":"0.694084100"},{"1":"0.762297870"},{"1":"-1.208816200"},{"1":"-0.662969600"},{"1":"0.495810300"},{"1":"1.140242600"},{"1":"-0.769129200"},{"1":"0.582288270"},{"1":"0.953198100"},{"1":"-0.492556360"},{"1":"-0.152205510"},{"1":"0.630118600"},{"1":"-0.048974630"},{"1":"-1.802233000"},{"1":"-0.033183973"},{"1":"0.513775700"},{"1":"-0.250110420"},{"1":"-0.190220620"},{"1":"0.569843600"},{"1":"-0.561405240"},{"1":"-1.310571200"},{"1":"0.060763890"},{"1":"-0.442699300"},{"1":"-1.266637300"},{"1":"0.020340743"},{"1":"0.695097500"},{"1":"0.229812600"},{"1":"0.092189340"},{"1":"0.114012845"},{"1":"-0.317234220"},{"1":"-0.351129300"},{"1":"0.081550730"},{"1":"-0.489821260"},{"1":"0.811029700"},{"1":"-0.200296500"},{"1":"0.096024620"},{"1":"0.421887900"},{"1":"0.464901780"},{"1":"-0.348830600"},{"1":"-0.997798200"},{"1":"-0.136719020"},{"1":"0.225708650"},{"1":"-0.897637550"},{"1":"0.595875000"},{"1":"-0.950204970"},{"1":"-0.456303660"},{"1":"0.786231600"},{"1":"1.256738300"},{"1":"0.569599700"},{"1":"0.709840300"},{"1":"-0.128583680"},{"1":"-0.066090580"},{"1":"0.923031900"},{"1":"0.460868000"},{"1":"-0.848209900"},{"1":"0.152313400"},{"1":"1.446177500"},{"1":"0.658580800"},{"1":"-1.620733900"},{"1":"-0.793100800"},{"1":"0.196725030"},{"1":"-0.797566700"},{"1":"1.064791300"},{"1":"0.248449280"},{"1":"0.652092930"},{"1":"0.231176470"},{"1":"-0.380014030"},{"1":"-0.825790800"},{"1":"-0.078826660"},{"1":"-0.831136940"},{"1":"0.260036920"},{"1":"0.743055940"},{"1":"0.444991440"},{"1":"0.064195860"},{"1":"0.143643650"},{"1":"-0.368161740"},{"1":"1.505341600"},{"1":"-0.350835860"},{"1":"0.186358050"},{"1":"0.737701700"},{"1":"0.620393200"},{"1":"0.477159620"},{"1":"-0.555303750"},{"1":"0.384169370"},{"1":"0.871298100"},{"1":"-1.062212300"},{"1":"-0.749370160"},{"1":"-0.995111170"},{"1":"0.643926800"},{"1":"-0.302965900"},{"1":"0.812171100"},{"1":"1.041696800"},{"1":"-0.505481540"},{"1":"-0.030571345"},{"1":"0.549894200"},{"1":"0.174715520"},{"1":"-0.883174300"},{"1":"-1.215771100"},{"1":"-0.139470010"},{"1":"-0.088582320"},{"1":"-0.827352460"},{"1":"0.551829400"},{"1":"-0.858978330"},{"1":"-0.513695800"},{"1":"-0.892883240"},{"1":"-0.855765900"},{"1":"-0.332555350"},{"1":"0.867799800"},{"1":"1.354664400"},{"1":"0.422859040"},{"1":"-0.299119090"},{"1":"0.173814220"},{"1":"0.315714000"},{"1":"-0.924837200"},{"1":"-1.535601500"},{"1":"-0.276627660"},{"1":"-0.852648800"},{"1":"-0.371568620"},{"1":"-0.392660300"},{"1":"-1.242944600"},{"1":"-0.577899400"}],"options":{"columns":{"min":{},"max":[10]},"rows":{"min":[10],"max":[10]},"pages":{}}}
   </script>
 </div>
 <pre class="r"><code>URL &lt;- &#39;https://api.logic-mill.net/api/v1/graphql/&#39;
-variables &lt;-  fromJSON(&#39;{&quot;data&quot;:{&quot;id&quot;:&quot;ID&quot;,&quot;parts&quot;:[{&quot;key&quot;:&quot;title&quot;,&quot;value&quot;:&quot;Airbags&quot;},{&quot;key&quot;:&quot;abstract&quot;,&quot;value&quot;:&quot;Airbags are one of the most important safety gears in motor vehicles such as cars and SUVs. These are cushions built into a vehicle that are intended to inflate in case of a car accident in order to protect occupants from injuries by preventing them from striking the interior of vehicle during a crash.&quot;}]}}&#39;)
+variables &lt;-  fromJSON(&#39;{&quot;data&quot;:{&quot;id&quot;:&quot;ID&quot;,&quot;parts&quot;:[{&quot;key&quot;:&quot;title&quot;,&quot;value&quot;:&quot;Airbags&quot;},{&quot;key&quot;:&quot;abstract&quot;,&quot;value&quot;:&quot;Airbags are one of the most important safety gears in motor vehicles such as cars and SUVs. These are cushions built into a vehicle that are intended to inflate in case of a car accident in order to protect occupants from injuries by preventing them from striking the interior of vehicle during a crash.&quot;}]}, &quot;model&quot;: &quot;patspecter&quot;}&#39;)
 
 
 
-query = &#39;query encodeDocument($data: EncodeObject) {
-  encodeDocument(data: $data)
+query = &#39;query encodeDocument($data: EncodeObject, $model: String!) {
+  encodeDocument(data: $data, model: $model)
 }&#39;
 
 new &lt;- Query$new()$query(&#39;link&#39;, query)
@@ -1944,52 +1936,52 @@ res = conn$exec(new$link, variables = variables) %&gt;%
 res$data$encodeDocument %&gt;% as_tibble()</code></pre>
 <div data-pagedtable="false">
 <script data-pagedtable-source type="application/json">
-{"columns":[{"label":["value"],"name":[1],"type":["dbl"],"align":["right"]}],"data":[{"1":"3.998839900"},{"1":"-0.353146900"},{"1":"3.504963900"},{"1":"0.542342900"},{"1":"-2.079426000"},{"1":"-3.331980700"},{"1":"1.463604000"},{"1":"-2.024687500"},{"1":"0.453847560"},{"1":"0.758371950"},{"1":"-0.704042900"},{"1":"-2.093235300"},{"1":"0.517685300"},{"1":"0.970485200"},{"1":"-0.695825160"},{"1":"-0.672118200"},{"1":"4.209061000"},{"1":"0.965203300"},{"1":"-1.457508100"},{"1":"-0.100057490"},{"1":"0.057095885"},{"1":"4.500226500"},{"1":"-1.082943200"},{"1":"0.464852150"},{"1":"-0.233206450"},{"1":"-4.107662000"},{"1":"3.231387000"},{"1":"-0.085241930"},{"1":"-0.756065600"},{"1":"-1.926080500"},{"1":"-2.309172600"},{"1":"1.313589700"},{"1":"-1.742973700"},{"1":"-1.090989200"},{"1":"-2.506079700"},{"1":"-1.095296500"},{"1":"1.109311700"},{"1":"-0.117826790"},{"1":"0.123566180"},{"1":"-1.385324200"},{"1":"-2.264231000"},{"1":"3.330954000"},{"1":"-0.340005520"},{"1":"-0.571430300"},{"1":"4.951790300"},{"1":"4.798572500"},{"1":"7.965338000"},{"1":"-0.528663340"},{"1":"-0.715113340"},{"1":"2.184306900"},{"1":"4.827546000"},{"1":"2.901882000"},{"1":"-2.817359000"},{"1":"0.492889170"},{"1":"-2.041917300"},{"1":"-2.206100000"},{"1":"0.072798490"},{"1":"1.079880200"},{"1":"-2.104537500"},{"1":"-0.458190140"},{"1":"-1.314128200"},{"1":"1.534773300"},{"1":"-0.463872670"},{"1":"0.612904800"},{"1":"-1.953078900"},{"1":"4.992454500"},{"1":"-3.477997000"},{"1":"-3.861992000"},{"1":"0.504836700"},{"1":"2.539511200"},{"1":"1.903651700"},{"1":"1.555404100"},{"1":"-3.513864500"},{"1":"-2.996757500"},{"1":"0.003645763"},{"1":"-0.539076200"},{"1":"-0.898038600"},{"1":"1.802420600"},{"1":"6.530491000"},{"1":"0.649187300"},{"1":"2.259490000"},{"1":"-1.313182000"},{"1":"-1.300830500"},{"1":"-2.012157200"},{"1":"0.697317600"},{"1":"0.736812700"},{"1":"-0.061792390"},{"1":"-2.659590000"},{"1":"3.346212400"},{"1":"3.838939700"},{"1":"-3.896312700"},{"1":"-4.651803000"},{"1":"1.283207500"},{"1":"0.017319143"},{"1":"2.790128500"},{"1":"0.812641000"},{"1":"0.256627920"},{"1":"-3.027763600"},{"1":"-1.458028300"},{"1":"-1.934040500"},{"1":"-3.323783900"},{"1":"1.131290800"},{"1":"4.310618400"},{"1":"-0.028260503"},{"1":"-1.241480700"},{"1":"2.387702500"},{"1":"-1.845863500"},{"1":"-1.668894500"},{"1":"6.741737000"},{"1":"-2.653122200"},{"1":"2.758445700"},{"1":"-0.677424900"},{"1":"-0.651700400"},{"1":"-0.442999600"},{"1":"2.607690300"},{"1":"-0.386315700"},{"1":"-4.892197600"},{"1":"-0.283419730"},{"1":"4.404796600"},{"1":"-3.685029500"},{"1":"2.080238000"},{"1":"5.585617000"},{"1":"-2.890083800"},{"1":"4.114711800"},{"1":"0.082086295"},{"1":"-2.889203500"},{"1":"0.147704400"},{"1":"5.000369000"},{"1":"-1.062331600"},{"1":"-0.402631940"},{"1":"-0.221484300"},{"1":"-0.089917630"},{"1":"-0.821199800"},{"1":"-3.586468200"},{"1":"2.445309400"},{"1":"-0.442690400"},{"1":"4.580301300"},{"1":"0.628647860"},{"1":"-1.683957600"},{"1":"2.899204000"},{"1":"-2.328136000"},{"1":"0.282162300"},{"1":"4.231242000"},{"1":"0.299337270"},{"1":"-0.594314800"},{"1":"1.267368600"},{"1":"4.367864000"},{"1":"-2.388882900"},{"1":"-2.141763700"},{"1":"-1.449019300"},{"1":"1.505616900"},{"1":"0.512651900"},{"1":"3.092635600"},{"1":"-1.538892100"},{"1":"1.987219300"},{"1":"3.370222600"},{"1":"-2.785909400"},{"1":"0.384175840"},{"1":"2.194019800"},{"1":"1.276407200"},{"1":"2.240251000"},{"1":"3.779963300"},{"1":"-0.847732660"},{"1":"7.395541700"},{"1":"1.888455300"},{"1":"-3.752535800"},{"1":"1.726370200"},{"1":"3.167004600"},{"1":"5.002572000"},{"1":"-1.536004100"},{"1":"1.466701000"},{"1":"-1.621114700"},{"1":"4.382926500"},{"1":"-3.216038700"},{"1":"-0.467654170"},{"1":"-0.194641890"},{"1":"-4.265790000"},{"1":"1.589760300"},{"1":"2.136748000"},{"1":"0.200096030"},{"1":"0.491614040"},{"1":"1.755060100"},{"1":"0.610017100"},{"1":"-0.225608480"},{"1":"-1.991070500"},{"1":"-4.535152000"},{"1":"-0.047847360"},{"1":"-4.961797700"},{"1":"-0.307070050"},{"1":"-1.281621100"},{"1":"0.892600060"},{"1":"-0.941918800"},{"1":"0.519151750"},{"1":"-0.399530740"},{"1":"-0.943368430"},{"1":"-2.047422600"},{"1":"-3.277313500"},{"1":"-1.050266500"},{"1":"2.560702000"},{"1":"0.088049890"},{"1":"1.401796600"},{"1":"-3.412370200"},{"1":"-0.559728260"},{"1":"1.393259300"},{"1":"-0.883778600"},{"1":"-4.797314600"},{"1":"-4.636426400"},{"1":"0.800690350"},{"1":"-0.546271700"},{"1":"1.102336400"},{"1":"-0.846209000"},{"1":"-6.534879000"},{"1":"-1.109466200"},{"1":"2.768521300"},{"1":"1.160573200"},{"1":"-2.532529800"},{"1":"-1.293457000"},{"1":"2.426777800"},{"1":"-0.320615900"},{"1":"1.302726100"},{"1":"-4.123705000"},{"1":"1.921019800"},{"1":"-5.794292000"},{"1":"1.557529400"},{"1":"-3.894455400"},{"1":"1.561204900"},{"1":"1.075997100"},{"1":"-0.517520250"},{"1":"2.801463600"},{"1":"-2.765168000"},{"1":"-1.225685200"},{"1":"0.160029530"},{"1":"1.339680000"},{"1":"0.118524075"},{"1":"1.122979000"},{"1":"1.254045600"},{"1":"-1.396086200"},{"1":"-3.242732800"},{"1":"0.743229270"},{"1":"-2.007290800"},{"1":"0.118232160"},{"1":"4.201826600"},{"1":"0.133871350"},{"1":"1.744800300"},{"1":"0.012683339"},{"1":"-3.884048000"},{"1":"3.150926000"},{"1":"-0.078191760"},{"1":"-0.501639400"},{"1":"-4.590080700"},{"1":"0.753285400"},{"1":"-0.502361800"},{"1":"5.033910000"},{"1":"-0.832009400"},{"1":"-2.369573600"},{"1":"-1.666698900"},{"1":"3.018800700"},{"1":"1.060526100"},{"1":"-5.299448000"},{"1":"0.651491050"},{"1":"-3.623557300"},{"1":"0.407575550"},{"1":"-5.167219000"},{"1":"3.118517900"},{"1":"-4.485672500"},{"1":"3.855456400"},{"1":"0.998152730"},{"1":"-0.118959220"},{"1":"-2.854153000"},{"1":"0.146333560"},{"1":"2.364146700"},{"1":"-2.491632700"},{"1":"-3.627267800"},{"1":"-0.594437060"},{"1":"-0.150305750"},{"1":"2.894266000"},{"1":"-1.868213200"},{"1":"5.222097000"},{"1":"-2.000978200"},{"1":"1.679506400"},{"1":"0.556183460"},{"1":"-3.609193300"},{"1":"-1.617719900"},{"1":"-1.190128700"},{"1":"5.167857000"},{"1":"-4.166990800"},{"1":"-0.201312180"},{"1":"2.583902000"},{"1":"1.872656200"},{"1":"6.450291600"},{"1":"-0.906016050"},{"1":"-0.489648300"},{"1":"3.674536200"},{"1":"-5.232577300"},{"1":"-1.613775500"},{"1":"-0.045864105"},{"1":"1.321194500"},{"1":"-1.131398000"},{"1":"3.064298600"},{"1":"2.370030400"},{"1":"2.706842700"},{"1":"2.155453000"},{"1":"-0.667048930"},{"1":"2.093990600"},{"1":"0.581209240"},{"1":"-0.698919500"},{"1":"-1.754183800"},{"1":"2.144210300"},{"1":"-1.046433200"},{"1":"-2.219838600"},{"1":"-2.753054900"},{"1":"2.761471700"},{"1":"1.091083300"},{"1":"-0.335275530"},{"1":"4.438110400"},{"1":"-0.713548800"},{"1":"-6.483190000"},{"1":"0.209058970"},{"1":"1.394067200"},{"1":"3.272873200"},{"1":"0.912581200"},{"1":"0.128337410"},{"1":"1.848195800"},{"1":"-0.933790000"},{"1":"-1.844506000"},{"1":"-3.309078200"},{"1":"-0.620508300"},{"1":"-2.751512300"},{"1":"-0.309271400"},{"1":"0.230003300"},{"1":"0.746771340"},{"1":"-2.412891000"},{"1":"-2.081769000"},{"1":"-0.976753800"},{"1":"3.044179200"},{"1":"0.847609760"},{"1":"5.927744000"},{"1":"-2.374984500"},{"1":"-0.217644360"},{"1":"-1.417461200"},{"1":"-2.581622800"},{"1":"1.798457500"},{"1":"0.778634370"},{"1":"3.097307400"},{"1":"5.540604600"},{"1":"2.059446000"},{"1":"-0.832599940"},{"1":"2.135512000"},{"1":"-0.197095270"},{"1":"0.431805970"},{"1":"1.328229300"},{"1":"0.450059350"},{"1":"0.920978900"},{"1":"1.132380200"},{"1":"0.869235200"},{"1":"0.658773840"},{"1":"1.515973600"},{"1":"-1.890822400"},{"1":"-0.926169900"},{"1":"-0.074123720"},{"1":"-1.756949700"},{"1":"0.692972660"},{"1":"-1.079432700"},{"1":"-0.538043800"},{"1":"-4.253817600"},{"1":"-2.890227300"},{"1":"2.803341400"},{"1":"2.098610900"},{"1":"-3.732056600"},{"1":"0.164189100"},{"1":"-2.179401400"},{"1":"3.907293000"},{"1":"-1.173176400"},{"1":"1.123455300"},{"1":"0.465894850"},{"1":"-1.765868800"},{"1":"2.601101900"},{"1":"-4.591230000"},{"1":"-2.462647000"},{"1":"-1.471350900"},{"1":"2.621292800"},{"1":"-0.277934220"},{"1":"1.202125100"},{"1":"-0.124695900"},{"1":"0.929650100"},{"1":"-1.799094700"},{"1":"-1.377008600"},{"1":"-2.412463400"},{"1":"-1.461796800"},{"1":"-0.644055800"},{"1":"-1.384862200"},{"1":"-5.614238000"},{"1":"2.017143500"},{"1":"1.883158300"},{"1":"0.378407120"},{"1":"-4.539085000"},{"1":"0.164453500"},{"1":"-2.229098600"},{"1":"6.748611000"},{"1":"0.092534410"},{"1":"-3.149173000"},{"1":"1.227114000"},{"1":"-2.523842300"},{"1":"-1.093917300"},{"1":"2.308915400"},{"1":"2.910944000"},{"1":"-2.835528000"},{"1":"2.052234600"},{"1":"-0.999050600"},{"1":"0.836416240"},{"1":"-3.378135700"},{"1":"0.127368470"},{"1":"0.444321000"},{"1":"-0.489483700"},{"1":"-1.350275800"},{"1":"2.018754500"},{"1":"4.050599000"},{"1":"-4.845288000"},{"1":"1.442786000"},{"1":"3.932651800"},{"1":"-3.967074000"},{"1":"-4.271655000"},{"1":"4.471561400"},{"1":"-1.403826600"},{"1":"-0.593878000"},{"1":"-0.398314100"},{"1":"2.552640400"},{"1":"3.198494400"},{"1":"2.412236200"},{"1":"-1.370418000"},{"1":"-2.652824200"},{"1":"0.458572200"},{"1":"-0.259511740"},{"1":"5.545103000"},{"1":"1.176873200"},{"1":"-1.163398600"},{"1":"1.615060100"},{"1":"3.294820300"},{"1":"-0.218381080"},{"1":"-3.965253600"},{"1":"-3.445639800"},{"1":"1.084027600"},{"1":"1.206653500"},{"1":"0.593605300"},{"1":"-2.694977300"},{"1":"0.695867300"},{"1":"-2.121750400"},{"1":"-1.291709500"},{"1":"-1.372181200"},{"1":"3.481275300"},{"1":"1.534449100"},{"1":"1.862450600"},{"1":"-2.955117700"},{"1":"2.353251700"},{"1":"-0.145562710"},{"1":"1.760398300"},{"1":"0.585514200"},{"1":"0.560403940"},{"1":"0.337340180"},{"1":"-3.584052800"},{"1":"1.066172600"},{"1":"0.932968200"},{"1":"-0.419093700"},{"1":"-2.787715000"},{"1":"2.533417500"},{"1":"3.618776300"},{"1":"-1.327072100"},{"1":"-1.184858800"},{"1":"-0.113442585"},{"1":"-0.625735000"},{"1":"0.809611140"},{"1":"0.720734400"},{"1":"0.076384040"},{"1":"-2.597129600"},{"1":"0.947169360"},{"1":"1.224619000"},{"1":"-3.739035000"},{"1":"-4.696841200"},{"1":"1.567794100"},{"1":"1.143517000"},{"1":"3.780743400"},{"1":"-1.002816000"},{"1":"-5.075360000"},{"1":"-0.987616840"},{"1":"-1.048519700"},{"1":"-1.988472200"},{"1":"3.918999200"},{"1":"-3.126541100"},{"1":"-1.341922800"},{"1":"-5.444021000"},{"1":"-2.547906600"},{"1":"-1.137557400"},{"1":"0.359905300"},{"1":"-5.975630300"},{"1":"-0.626556100"},{"1":"-4.029843300"},{"1":"-1.466785200"},{"1":"-1.893037100"},{"1":"5.814388300"},{"1":"-1.522951500"},{"1":"0.122902350"},{"1":"0.421635150"},{"1":"1.706046100"},{"1":"-2.994546400"},{"1":"1.447349500"},{"1":"-1.160403700"},{"1":"-0.030499011"},{"1":"1.980222200"},{"1":"-1.182757500"},{"1":"-1.985502200"},{"1":"-4.546940000"},{"1":"0.083249270"},{"1":"-0.905599300"},{"1":"-4.623960500"},{"1":"-3.118655400"},{"1":"3.124072000"},{"1":"0.688094560"},{"1":"1.565965700"},{"1":"-0.363332870"},{"1":"-3.950265400"},{"1":"-1.107283600"},{"1":"-2.477810400"},{"1":"-3.139073600"},{"1":"-0.562009930"},{"1":"3.203516500"},{"1":"1.987804400"},{"1":"-0.172048780"},{"1":"0.111750720"},{"1":"1.643217100"},{"1":"-3.419673200"},{"1":"-2.535760400"},{"1":"-1.921842600"},{"1":"-1.263183200"},{"1":"-2.839881700"},{"1":"-0.121590704"},{"1":"-1.737130600"},{"1":"6.044988600"},{"1":"0.661366900"},{"1":"-0.949284730"},{"1":"1.973737200"},{"1":"-0.766108900"},{"1":"4.126927400"},{"1":"0.174609990"},{"1":"-2.287524700"},{"1":"0.437555580"},{"1":"-0.909570500"},{"1":"2.283835400"},{"1":"-0.331816460"},{"1":"1.931571500"},{"1":"2.121770000"},{"1":"5.004326300"},{"1":"-3.490450000"},{"1":"3.226698600"},{"1":"-2.436908200"},{"1":"2.681005700"},{"1":"-1.179344200"},{"1":"-5.212940000"},{"1":"-1.090469000"},{"1":"5.115104000"},{"1":"-3.172319400"},{"1":"2.293056700"},{"1":"1.064201600"},{"1":"1.141951400"},{"1":"-2.119024300"},{"1":"-3.545943500"},{"1":"-1.979006300"},{"1":"5.589676000"},{"1":"1.828147900"},{"1":"-2.822845000"},{"1":"-1.255158700"},{"1":"2.249821700"},{"1":"1.637151100"},{"1":"-4.951493000"},{"1":"0.328089360"},{"1":"-0.146752000"},{"1":"-2.026338800"},{"1":"3.842722000"},{"1":"-3.555449000"},{"1":"0.290831150"},{"1":"-0.577183370"},{"1":"-2.039109500"},{"1":"0.276566680"},{"1":"-1.530591400"},{"1":"1.497423500"},{"1":"-1.853298400"},{"1":"-0.879175400"},{"1":"1.634384500"},{"1":"1.934293000"},{"1":"1.757051200"},{"1":"5.477711000"},{"1":"-2.837980700"},{"1":"-0.435496500"},{"1":"-1.196405600"},{"1":"0.671467300"},{"1":"3.705649900"},{"1":"-3.726593700"},{"1":"-1.864069700"},{"1":"2.395173500"},{"1":"4.051314000"},{"1":"-0.737016100"},{"1":"-0.016838253"},{"1":"3.497501100"},{"1":"-3.241878000"},{"1":"0.542901040"},{"1":"1.000911000"},{"1":"-1.847185700"},{"1":"-0.893092600"},{"1":"1.171030600"},{"1":"-0.915840300"},{"1":"0.123146180"},{"1":"-2.012346500"},{"1":"6.853324400"},{"1":"6.349008600"},{"1":"0.715971770"},{"1":"-0.188708930"},{"1":"1.293476600"},{"1":"-0.197275820"},{"1":"0.937224860"},{"1":"-1.211403400"},{"1":"-2.018555000"},{"1":"1.608048400"},{"1":"0.313281660"},{"1":"-4.159347000"},{"1":"2.641648300"},{"1":"0.003952563"},{"1":"-2.357322500"},{"1":"3.756307100"},{"1":"1.882848300"},{"1":"0.343079480"},{"1":"1.705757600"},{"1":"3.059415300"},{"1":"2.574802000"},{"1":"4.241221000"},{"1":"-2.032523200"},{"1":"-2.153488400"},{"1":"2.393870400"},{"1":"-0.019893020"},{"1":"3.081545800"},{"1":"-2.203428500"},{"1":"-0.580450360"},{"1":"0.183935780"},{"1":"3.779692400"},{"1":"1.713881700"},{"1":"-0.914475140"},{"1":"6.919565700"},{"1":"-0.628997100"},{"1":"1.841427300"},{"1":"-0.570674840"},{"1":"3.386228000"},{"1":"-0.356212650"},{"1":"1.553153300"},{"1":"3.773050300"},{"1":"-2.624747000"},{"1":"0.791671700"},{"1":"-0.468249080"},{"1":"4.312894000"},{"1":"0.468629000"},{"1":"2.690713400"},{"1":"1.190569200"},{"1":"-1.491900300"},{"1":"3.171098500"},{"1":"6.577312000"},{"1":"1.180315000"},{"1":"1.036885700"},{"1":"-4.543456000"},{"1":"-0.476118200"},{"1":"-1.828415000"},{"1":"1.344722600"},{"1":"1.787114600"},{"1":"-4.463755600"},{"1":"-0.133632360"},{"1":"-5.317542000"},{"1":"0.239176810"},{"1":"0.315076980"},{"1":"2.875535000"},{"1":"0.334074700"},{"1":"0.902999640"},{"1":"1.023222200"},{"1":"0.645899500"},{"1":"3.480024000"},{"1":"3.324558300"},{"1":"2.915746500"},{"1":"0.162183060"},{"1":"-4.371817600"},{"1":"2.398663000"},{"1":"-3.213435000"},{"1":"-0.513899000"},{"1":"0.176505920"},{"1":"-4.043101000"},{"1":"-2.363288600"},{"1":"1.088589800"},{"1":"7.441072000"},{"1":"3.709621000"},{"1":"0.556156460"},{"1":"0.915273200"},{"1":"-1.457543700"},{"1":"0.075042310"},{"1":"-3.462860300"},{"1":"2.486514300"},{"1":"-2.731440800"},{"1":"4.185345600"},{"1":"-4.072562000"},{"1":"-3.285385000"},{"1":"-2.670714900"},{"1":"-0.005553037"},{"1":"2.173823600"},{"1":"-2.935253600"},{"1":"-5.033034300"},{"1":"-4.744286500"},{"1":"-1.963524100"},{"1":"1.535437600"},{"1":"-2.149009000"},{"1":"-0.672417400"},{"1":"0.224001940"},{"1":"-0.865287070"},{"1":"1.294612600"},{"1":"3.311641000"},{"1":"-1.783725300"},{"1":"0.699396250"},{"1":"0.043420345"},{"1":"-0.252634440"},{"1":"2.059962300"},{"1":"0.507606200"},{"1":"-0.329245630"},{"1":"-0.946388840"},{"1":"-0.571494160"},{"1":"-3.072042500"},{"1":"6.398246000"},{"1":"-4.951332000"},{"1":"3.820692500"},{"1":"3.585680000"},{"1":"-2.665271800"},{"1":"2.518762800"},{"1":"-0.425287500"},{"1":"-0.447630700"},{"1":"0.246318820"},{"1":"4.253081300"},{"1":"3.683185000"},{"1":"0.578684700"},{"1":"-2.485554000"},{"1":"6.551353500"},{"1":"-1.505597200"},{"1":"-2.671890500"},{"1":"0.525137960"},{"1":"0.109227880"},{"1":"-5.942495000"},{"1":"-0.566022340"},{"1":"-4.421466000"},{"1":"3.229018400"},{"1":"4.018797000"},{"1":"1.136070100"},{"1":"-0.921531000"},{"1":"-2.450705800"},{"1":"2.044694700"},{"1":"1.306722400"},{"1":"3.827244500"},{"1":"-1.886922100"},{"1":"-0.944181100"},{"1":"-0.141866610"},{"1":"1.085739500"},{"1":"0.557915400"},{"1":"-1.557938000"},{"1":"-5.665275000"},{"1":"-2.455162800"},{"1":"2.763710300"},{"1":"-3.843295800"},{"1":"0.552960750"},{"1":"1.069129600"}],"options":{"columns":{"min":{},"max":[10]},"rows":{"min":[10],"max":[10]},"pages":{}}}
+{"columns":[{"label":["value"],"name":[1],"type":["dbl"],"align":["right"]}],"data":[{"1":"-0.2217149900"},{"1":"0.2530666000"},{"1":"0.0234135040"},{"1":"0.7219604000"},{"1":"0.0080960340"},{"1":"-0.6433678000"},{"1":"0.8728635300"},{"1":"0.2439938500"},{"1":"0.0141919660"},{"1":"0.7068674000"},{"1":"0.6316104000"},{"1":"-1.1759274000"},{"1":"0.2041008900"},{"1":"-0.8562894000"},{"1":"-1.4694304000"},{"1":"-0.0572372340"},{"1":"-0.4898522800"},{"1":"-0.3737973000"},{"1":"0.3376946700"},{"1":"-1.0897979000"},{"1":"0.2971908500"},{"1":"0.2321952400"},{"1":"-0.4348981000"},{"1":"0.1500868400"},{"1":"0.4878311000"},{"1":"0.8604219600"},{"1":"-0.1170869300"},{"1":"1.0020225000"},{"1":"0.1941513600"},{"1":"0.9233653500"},{"1":"0.2754272200"},{"1":"-0.2694933000"},{"1":"0.4382772400"},{"1":"0.4243846200"},{"1":"-0.6003108600"},{"1":"0.0741778000"},{"1":"0.8955831500"},{"1":"-1.0370002000"},{"1":"-0.3390488300"},{"1":"0.0997136400"},{"1":"-0.4599882700"},{"1":"0.4466402000"},{"1":"0.6017617600"},{"1":"-1.2818094000"},{"1":"-0.5590953000"},{"1":"0.6863115000"},{"1":"-0.4588626300"},{"1":"0.5355775400"},{"1":"-0.2348076300"},{"1":"-0.5617713000"},{"1":"0.5985371500"},{"1":"-1.2042774000"},{"1":"0.3875806600"},{"1":"0.6068072000"},{"1":"0.5561806600"},{"1":"1.3444668000"},{"1":"-1.4360299000"},{"1":"-0.6577788600"},{"1":"1.0313195000"},{"1":"0.0243854130"},{"1":"-1.0850015000"},{"1":"0.0663435760"},{"1":"0.7544284000"},{"1":"-1.3079184000"},{"1":"1.1067578000"},{"1":"0.2972608200"},{"1":"0.3034806300"},{"1":"0.0989395400"},{"1":"0.1518271900"},{"1":"0.6955057000"},{"1":"1.0710661000"},{"1":"-0.4889747000"},{"1":"0.3573303500"},{"1":"0.3340814000"},{"1":"1.3996150000"},{"1":"0.5531522000"},{"1":"0.0478473570"},{"1":"0.2580431000"},{"1":"-0.2328110300"},{"1":"-0.3127492400"},{"1":"-0.5216812500"},{"1":"0.0891497060"},{"1":"-0.0488313660"},{"1":"-0.6072697000"},{"1":"-0.4422536200"},{"1":"0.8975371000"},{"1":"0.5210808500"},{"1":"0.0518817680"},{"1":"0.8051780500"},{"1":"1.2720855000"},{"1":"0.0752120600"},{"1":"0.4188949500"},{"1":"-0.2701937000"},{"1":"-0.8667291000"},{"1":"0.1240418550"},{"1":"1.3901510000"},{"1":"-0.5000510000"},{"1":"0.2670144400"},{"1":"-0.4014967700"},{"1":"0.6850838000"},{"1":"-0.0724566000"},{"1":"0.1245033000"},{"1":"-0.1545136600"},{"1":"0.2010052500"},{"1":"1.6924493000"},{"1":"0.4314493200"},{"1":"0.1344756600"},{"1":"-0.8371779300"},{"1":"-0.1595745400"},{"1":"0.2880825700"},{"1":"-0.4669186800"},{"1":"-1.4280881000"},{"1":"0.0851273100"},{"1":"-0.3907601200"},{"1":"-0.8667286600"},{"1":"-0.4784221600"},{"1":"0.1276544200"},{"1":"0.6789633000"},{"1":"-0.3886178400"},{"1":"1.2182403000"},{"1":"0.4163185400"},{"1":"-0.2484248700"},{"1":"-0.9806565600"},{"1":"0.3440742500"},{"1":"0.8214592300"},{"1":"0.0937275200"},{"1":"-0.2235748000"},{"1":"0.8730865000"},{"1":"0.7342457000"},{"1":"-0.6505682000"},{"1":"-0.7506488000"},{"1":"-0.8016668600"},{"1":"-0.2769619500"},{"1":"-0.4154155000"},{"1":"0.5114443000"},{"1":"0.3281294000"},{"1":"-0.2129005300"},{"1":"-1.2565726000"},{"1":"-1.6890546000"},{"1":"0.9944738000"},{"1":"-0.8853013000"},{"1":"-0.2462702700"},{"1":"0.8110733000"},{"1":"1.3916107000"},{"1":"-0.8402676000"},{"1":"-0.2512066000"},{"1":"-0.5694108000"},{"1":"-0.1071449500"},{"1":"0.3832736600"},{"1":"0.1467507500"},{"1":"-0.0030026983"},{"1":"-0.0296383720"},{"1":"-0.5263075000"},{"1":"1.1431314000"},{"1":"-0.3710455600"},{"1":"-0.3963463300"},{"1":"-0.6577309400"},{"1":"0.0508586880"},{"1":"-1.2086987000"},{"1":"-0.4273893000"},{"1":"0.9816594000"},{"1":"-1.1019874000"},{"1":"1.5055331000"},{"1":"-0.0174921320"},{"1":"-0.3749291600"},{"1":"0.4055712000"},{"1":"1.0185145000"},{"1":"-0.6271403400"},{"1":"-0.2863562400"},{"1":"-0.2326119000"},{"1":"-0.1129801700"},{"1":"0.2625374800"},{"1":"0.2540501700"},{"1":"0.6547013000"},{"1":"0.6537633500"},{"1":"-1.2514257000"},{"1":"0.0594383800"},{"1":"-0.5963670000"},{"1":"-0.2657369000"},{"1":"-0.3751810800"},{"1":"-0.7122931000"},{"1":"1.2404205000"},{"1":"1.3024539000"},{"1":"-0.1598395600"},{"1":"-0.2201762600"},{"1":"-0.6246009500"},{"1":"-0.3231884800"},{"1":"-0.6623137000"},{"1":"-0.9224033000"},{"1":"-0.2674320000"},{"1":"1.4975620000"},{"1":"-0.9738381500"},{"1":"1.3506980000"},{"1":"-1.3826756000"},{"1":"-1.0987424000"},{"1":"-0.0829978300"},{"1":"-0.0583413360"},{"1":"-0.3971853000"},{"1":"0.0983927400"},{"1":"0.6655984000"},{"1":"-0.6291176700"},{"1":"0.3495941800"},{"1":"-0.6040942700"},{"1":"-0.7653627000"},{"1":"-0.4526176800"},{"1":"0.4213722300"},{"1":"-1.3890381000"},{"1":"0.4638862600"},{"1":"-0.2366732500"},{"1":"0.1854297800"},{"1":"-0.5068804600"},{"1":"-0.2971966600"},{"1":"0.4908343000"},{"1":"0.0719270900"},{"1":"-0.6658579000"},{"1":"1.0648692000"},{"1":"-0.0253621790"},{"1":"0.4007998400"},{"1":"-0.1978568300"},{"1":"0.2915286700"},{"1":"0.7028688000"},{"1":"0.7300075000"},{"1":"-0.7255423700"},{"1":"0.1453476800"},{"1":"-0.2617496800"},{"1":"0.7611348000"},{"1":"-1.0702872000"},{"1":"0.5758660400"},{"1":"0.2962143400"},{"1":"-0.3671560000"},{"1":"0.1687834700"},{"1":"-1.5270853000"},{"1":"0.0306608960"},{"1":"0.7334989000"},{"1":"0.1454655200"},{"1":"-0.0132063490"},{"1":"1.4590479000"},{"1":"-0.7172698000"},{"1":"-1.2752726000"},{"1":"-0.1789360500"},{"1":"-0.0845991700"},{"1":"0.9096736300"},{"1":"-0.5594211000"},{"1":"0.6962783300"},{"1":"-0.4399507300"},{"1":"-0.4443069400"},{"1":"0.2402019800"},{"1":"0.7756845400"},{"1":"0.2656282000"},{"1":"0.1735435300"},{"1":"0.0703397200"},{"1":"-0.5951732000"},{"1":"0.6604058000"},{"1":"-0.4480612000"},{"1":"-0.2472577100"},{"1":"1.0310429000"},{"1":"0.9795361000"},{"1":"0.5143407000"},{"1":"1.0363457000"},{"1":"-0.4490618700"},{"1":"-0.4231776000"},{"1":"-0.9454999600"},{"1":"0.5349055500"},{"1":"1.1188260000"},{"1":"-0.2644046800"},{"1":"-0.4443733700"},{"1":"-0.9506025000"},{"1":"-1.1717607000"},{"1":"-0.2854287300"},{"1":"0.6504369000"},{"1":"0.3484284600"},{"1":"-0.5646382000"},{"1":"-0.6967592000"},{"1":"-0.2736474000"},{"1":"0.4421030600"},{"1":"0.5199274000"},{"1":"0.9449665000"},{"1":"-0.3104690000"},{"1":"-0.2674286000"},{"1":"-0.3839837600"},{"1":"0.4010869300"},{"1":"-0.8374995000"},{"1":"-0.4770829700"},{"1":"-0.3275217700"},{"1":"-0.5368526000"},{"1":"-0.4379332400"},{"1":"1.0985233000"},{"1":"-0.0171113460"},{"1":"0.7418098000"},{"1":"-0.5079014000"},{"1":"1.1121768000"},{"1":"-0.1002596700"},{"1":"-0.5236777700"},{"1":"0.5668444600"},{"1":"0.1921211200"},{"1":"-0.9960944000"},{"1":"-0.6371767500"},{"1":"-1.3176339000"},{"1":"-0.0111966110"},{"1":"0.1138635050"},{"1":"-0.3712619200"},{"1":"-0.4406313600"},{"1":"-0.5806822000"},{"1":"0.3964062600"},{"1":"-0.9218041300"},{"1":"0.2737450000"},{"1":"-0.7676282000"},{"1":"0.6619308600"},{"1":"0.7167026400"},{"1":"-0.5746388400"},{"1":"0.9456712600"},{"1":"0.2334862200"},{"1":"1.1351106000"},{"1":"-0.4131310300"},{"1":"0.0767768800"},{"1":"-0.4755518400"},{"1":"-0.1378213000"},{"1":"-1.0146726000"},{"1":"0.4354020000"},{"1":"-0.5574729000"},{"1":"0.1679378600"},{"1":"-1.0857497000"},{"1":"-0.5271590400"},{"1":"-0.0761333700"},{"1":"-0.7506446000"},{"1":"0.4741702700"},{"1":"-0.1624770300"},{"1":"0.1344583800"},{"1":"-0.0120977380"},{"1":"-0.5599168500"},{"1":"0.1314664800"},{"1":"-0.4726861700"},{"1":"0.2694107000"},{"1":"0.3316311800"},{"1":"1.1800542000"},{"1":"-0.4287997500"},{"1":"0.5279578000"},{"1":"1.0719892000"},{"1":"0.2719357300"},{"1":"-0.6331482000"},{"1":"-0.4275520000"},{"1":"0.4344452300"},{"1":"0.8356488300"},{"1":"-1.2071401000"},{"1":"0.7570652400"},{"1":"-0.6718609000"},{"1":"0.2324909600"},{"1":"-0.3749433800"},{"1":"-0.8880718000"},{"1":"-0.7893911000"},{"1":"-0.1688318600"},{"1":"0.7376934000"},{"1":"-1.2403435000"},{"1":"0.0364277740"},{"1":"-0.7053271500"},{"1":"-0.7820828600"},{"1":"-1.1903175000"},{"1":"-0.5823182500"},{"1":"0.1734473300"},{"1":"-0.1981281300"},{"1":"-0.4957233700"},{"1":"-0.2960148000"},{"1":"0.6127858000"},{"1":"0.8995703000"},{"1":"1.2861147000"},{"1":"1.1027690000"},{"1":"1.5379705000"},{"1":"-0.1531644900"},{"1":"0.1206290600"},{"1":"-0.4854706800"},{"1":"0.6622621400"},{"1":"1.2202665000"},{"1":"-0.8575461000"},{"1":"0.3573708000"},{"1":"-0.1270032000"},{"1":"-0.8331014500"},{"1":"0.4976095600"},{"1":"-0.2089359300"},{"1":"1.0237882000"},{"1":"0.9762129000"},{"1":"0.8153024300"},{"1":"-0.5831228000"},{"1":"-0.4327656000"},{"1":"0.0720880300"},{"1":"0.9054068300"},{"1":"-0.1508259800"},{"1":"0.0292943800"},{"1":"-0.0143435250"},{"1":"0.5548806000"},{"1":"0.1473821700"},{"1":"0.7538183300"},{"1":"-0.2635522200"},{"1":"-0.5411638600"},{"1":"0.2179984900"},{"1":"1.1797372000"},{"1":"-0.4021473500"},{"1":"-0.0509966160"},{"1":"0.5068500000"},{"1":"1.4423878000"},{"1":"0.3263009200"},{"1":"0.5393237000"},{"1":"1.0601784000"},{"1":"-1.3283763000"},{"1":"0.3093909000"},{"1":"-1.3944643000"},{"1":"-1.0701007000"},{"1":"0.5252899000"},{"1":"0.6407026000"},{"1":"0.4483351700"},{"1":"0.2595009200"},{"1":"0.3830054700"},{"1":"0.6008135700"},{"1":"1.0316093000"},{"1":"-0.6298948000"},{"1":"1.1142652000"},{"1":"-0.2743339500"},{"1":"0.0150949340"},{"1":"0.2220695900"},{"1":"0.1090263650"},{"1":"0.8764919600"},{"1":"-1.3481523000"},{"1":"-0.1130348800"},{"1":"10.5111880000"},{"1":"0.4649957400"},{"1":"-0.5802716600"},{"1":"0.8112528000"},{"1":"0.5670230400"},{"1":"0.0522093180"},{"1":"-0.4507320000"},{"1":"0.4850335400"},{"1":"-1.0188570000"},{"1":"0.1517962200"},{"1":"1.0413787000"},{"1":"0.8308780000"},{"1":"0.1132392700"},{"1":"1.2592573000"},{"1":"-0.0838908600"},{"1":"-0.3502032800"},{"1":"-0.4973049800"},{"1":"-0.3466495000"},{"1":"0.5104419000"},{"1":"-0.9173699600"},{"1":"-0.6660782000"},{"1":"0.1063764300"},{"1":"0.5358695400"},{"1":"1.1642323000"},{"1":"0.8427272000"},{"1":"0.0275315980"},{"1":"0.4323317400"},{"1":"-0.4047896600"},{"1":"1.7645438000"},{"1":"-0.0478021760"},{"1":"0.9025907000"},{"1":"-1.6953962000"},{"1":"0.3772688200"},{"1":"1.2939193000"},{"1":"-0.8322822500"},{"1":"-0.0874752000"},{"1":"-0.7570498000"},{"1":"-0.9431675700"},{"1":"0.5934608000"},{"1":"0.2006112300"},{"1":"-1.6125500000"},{"1":"-0.3795906600"},{"1":"0.9562622300"},{"1":"-0.6290691500"},{"1":"-0.6229332700"},{"1":"-0.0171825350"},{"1":"-0.5979184500"},{"1":"0.0908523100"},{"1":"-0.9322341700"},{"1":"-0.5181149000"},{"1":"0.0768709100"},{"1":"0.2834970400"},{"1":"0.8800486300"},{"1":"0.1835851200"},{"1":"-0.2316822700"},{"1":"-0.2661220400"},{"1":"-0.2540980000"},{"1":"1.7030158000"},{"1":"0.6627292600"},{"1":"-0.2559918000"},{"1":"-0.5533738000"},{"1":"-0.9161832300"},{"1":"-0.5076170600"},{"1":"0.5573711400"},{"1":"0.0522276000"},{"1":"-0.2017050100"},{"1":"-0.6364509000"},{"1":"-0.2362514600"},{"1":"-0.1670290200"},{"1":"0.1358633600"},{"1":"-0.9948419300"},{"1":"-0.1243767500"},{"1":"1.0395305000"},{"1":"1.4568348000"},{"1":"-0.0394818450"},{"1":"-0.4343824400"},{"1":"-0.5485048000"},{"1":"-0.1742585500"},{"1":"-0.7877883300"},{"1":"-0.4955836000"},{"1":"0.6946244000"},{"1":"-0.5452891000"},{"1":"-1.0367078000"},{"1":"0.9570414000"},{"1":"0.3586566000"},{"1":"-0.6096436000"},{"1":"0.2072439600"},{"1":"-1.3268702000"},{"1":"-1.1621994000"},{"1":"0.3996437000"},{"1":"-0.7992311000"},{"1":"-1.7997745000"},{"1":"-0.3385282200"},{"1":"1.0911705000"},{"1":"-0.4964362400"},{"1":"1.2402376000"},{"1":"0.3290442500"},{"1":"-0.4926973300"},{"1":"-0.8027712000"},{"1":"0.1671695000"},{"1":"0.0190646520"},{"1":"0.1613453300"},{"1":"0.5698310000"},{"1":"-1.0649996000"},{"1":"0.7727479300"},{"1":"0.6776233300"},{"1":"-0.6654785000"},{"1":"1.1578729000"},{"1":"0.1740669300"},{"1":"-0.8818294400"},{"1":"-0.5688041400"},{"1":"-0.1144250850"},{"1":"-0.2462871500"},{"1":"-1.0650083000"},{"1":"0.5407873400"},{"1":"-1.1409184000"},{"1":"-0.7599082600"},{"1":"0.9435608000"},{"1":"0.8848771000"},{"1":"-0.4412333400"},{"1":"1.2578225000"},{"1":"-0.5379947400"},{"1":"0.1941541100"},{"1":"0.0563453300"},{"1":"-0.8038164000"},{"1":"0.4468608500"},{"1":"0.7045966000"},{"1":"-0.3896860200"},{"1":"-1.5412840000"},{"1":"0.3696905000"},{"1":"0.9982298000"},{"1":"-0.2411612100"},{"1":"-0.1797568500"},{"1":"1.1124562000"},{"1":"0.3513611000"},{"1":"-1.3828193000"},{"1":"1.3140866000"},{"1":"-1.8398900000"},{"1":"0.0312447380"},{"1":"0.1947235200"},{"1":"0.0999776400"},{"1":"-0.9938526000"},{"1":"-0.2269834700"},{"1":"-0.6208847000"},{"1":"0.3050023000"},{"1":"0.3675665300"},{"1":"0.4180070200"},{"1":"-0.5663651000"},{"1":"-0.0240600220"},{"1":"0.3532465000"},{"1":"-0.6330416000"},{"1":"-0.7083389000"},{"1":"-0.5989666600"},{"1":"0.3851030200"},{"1":"0.2782859000"},{"1":"-0.2332786800"},{"1":"0.9255196000"},{"1":"0.5056548000"},{"1":"0.5700968500"},{"1":"0.4454500700"},{"1":"-0.4317788200"},{"1":"0.7584748000"},{"1":"0.2441610800"},{"1":"-0.4654016000"},{"1":"1.2537743000"},{"1":"-0.4653394200"},{"1":"-0.4073957000"},{"1":"-0.1365536600"},{"1":"0.1347592300"},{"1":"-0.4864984200"},{"1":"-0.1396299900"},{"1":"0.0672243900"},{"1":"-0.3081656000"},{"1":"-1.1999606000"},{"1":"0.0914474900"},{"1":"0.4748696400"},{"1":"-0.9321728300"},{"1":"0.0755727800"},{"1":"-0.0037770532"},{"1":"-0.1099727500"},{"1":"-1.0388058000"},{"1":"-0.7405073000"},{"1":"0.2766595200"},{"1":"0.0786809900"},{"1":"0.6780166000"},{"1":"0.2531228400"},{"1":"-0.3384217300"},{"1":"0.2592687600"},{"1":"-0.2888033000"},{"1":"0.8981285000"},{"1":"0.5024916000"},{"1":"-0.0102305630"},{"1":"-1.2342805000"},{"1":"-0.9437288600"},{"1":"0.3180036200"},{"1":"-0.0856571050"},{"1":"0.0041675875"},{"1":"-0.8540638000"},{"1":"0.6413973000"},{"1":"-0.0812043550"},{"1":"-0.3462346200"},{"1":"-0.8219651000"},{"1":"0.4964499500"},{"1":"-0.6725263000"},{"1":"0.4325685800"},{"1":"0.6240494000"},{"1":"0.4890612000"},{"1":"0.1209914240"},{"1":"0.5666080000"},{"1":"0.0364054900"},{"1":"-0.2231201500"},{"1":"0.5991460000"},{"1":"0.1346219300"},{"1":"-0.0388261400"},{"1":"-0.5964575000"},{"1":"-0.1937110400"},{"1":"-1.2822286000"},{"1":"-0.2301833200"},{"1":"0.7582100600"},{"1":"-1.2508955000"},{"1":"-1.1328607000"},{"1":"-0.7664913500"},{"1":"-0.6143666000"},{"1":"-0.2331752500"},{"1":"-0.4065427000"},{"1":"0.2912320200"},{"1":"0.7928227000"},{"1":"-0.9781046500"},{"1":"-0.6910872500"},{"1":"0.9076460000"},{"1":"0.7720241000"},{"1":"-0.0043236823"},{"1":"0.4930438700"},{"1":"1.7670113000"},{"1":"-1.1994208000"},{"1":"0.1439006300"},{"1":"-0.0291070420"},{"1":"0.2157410700"},{"1":"-2.0282378000"},{"1":"0.0919559300"},{"1":"0.3191311700"},{"1":"0.5195981000"},{"1":"0.0006941861"},{"1":"1.6212848000"},{"1":"0.0389764570"},{"1":"-0.1811691100"},{"1":"-0.0950403100"},{"1":"-0.7337947500"},{"1":"-1.2723950000"},{"1":"0.0457859500"},{"1":"1.2344426000"},{"1":"0.9277463600"},{"1":"0.1749898000"},{"1":"-0.6274192300"},{"1":"0.2684550600"},{"1":"0.3049957800"},{"1":"0.5610778000"},{"1":"0.0774644200"},{"1":"0.2981053600"},{"1":"-0.1701065300"},{"1":"-0.6096849400"},{"1":"-0.3459240000"},{"1":"0.6048699000"},{"1":"0.9180269000"},{"1":"-1.0357630000"},{"1":"0.5085546400"},{"1":"-0.5365870000"},{"1":"-0.6482839600"},{"1":"0.3056471000"},{"1":"-0.2556533200"},{"1":"-0.6922158600"},{"1":"1.2522637000"},{"1":"0.6079880000"},{"1":"0.9226466000"},{"1":"0.9502124000"},{"1":"0.5186963000"},{"1":"0.6716510000"},{"1":"-0.2642249800"},{"1":"0.1524049200"},{"1":"-0.5238660600"},{"1":"-0.1208521000"},{"1":"1.0014510000"},{"1":"1.2346277000"},{"1":"-0.8481254600"},{"1":"-1.2406826000"},{"1":"-0.0611661340"},{"1":"-0.2315396200"},{"1":"0.5783649000"},{"1":"0.8792259700"},{"1":"-0.2708854700"},{"1":"0.0060841166"},{"1":"0.1367544500"},{"1":"-0.3746446000"},{"1":"-0.0392416860"},{"1":"-0.4663428000"},{"1":"-0.0828375500"},{"1":"1.3517174000"},{"1":"0.3163524000"},{"1":"-0.0969201250"},{"1":"0.1099356700"},{"1":"-0.9434414000"},{"1":"1.6364607000"},{"1":"-0.3066297800"},{"1":"-0.8368660000"},{"1":"0.6124244000"},{"1":"0.9557082000"},{"1":"-0.0322093850"},{"1":"-0.6303078500"},{"1":"-0.6527535300"},{"1":"0.4812726700"},{"1":"-1.1804675000"},{"1":"-0.7556090400"},{"1":"-1.1433471000"},{"1":"1.0769823000"},{"1":"-0.1035306100"},{"1":"0.5784142000"},{"1":"1.3943572000"},{"1":"-1.1056342000"},{"1":"0.5065042400"},{"1":"0.0486100470"},{"1":"0.2802297200"},{"1":"-0.8605358600"},{"1":"-0.6715333500"},{"1":"0.3827747000"},{"1":"0.3784709000"},{"1":"-0.7229643000"},{"1":"1.1182878000"},{"1":"-0.4195477700"},{"1":"-0.4304772300"},{"1":"-1.5010393000"},{"1":"-1.5172155000"},{"1":"-0.0490371320"},{"1":"0.8676408000"},{"1":"0.6453977000"},{"1":"0.1691916600"},{"1":"0.3469529000"},{"1":"0.3034970800"},{"1":"0.0960641000"},{"1":"-0.7779734000"},{"1":"-1.3999048000"},{"1":"-0.0728152400"},{"1":"-0.7438512400"},{"1":"-0.2381109300"},{"1":"-0.9363721600"},{"1":"-0.8138041000"},{"1":"-0.8149264000"}],"options":{"columns":{"min":{},"max":[10]},"rows":{"min":[10],"max":[10]},"pages":{}}}
   </script>
 </div>
 <div id="create-embeddings-for-multiple-documents" class="section level2">
 <h2>Create embeddings for multiple documents</h2>
-<pre class="r"><code>query = &#39;query encodeDocument($data: EncodeObject) {
-  encodeDocument(data: $data)
+<pre class="r"><code>query = &#39;query encodeDocuments($data: [EncodeObject], $model: String!) {
+  encodeDocuments(data: $data, model: $model)
 }&#39;
 new &lt;- Query$new()$query(&#39;link&#39;, query)
 
 df &lt;- data.frame()
 
 for (i in 1:length(biblios)){
-    biblio &lt;-  biblios[i,]
-    data &lt;-  list(id=biblio$id)
-    data$parts &lt;-  list()
+    biblio &lt;-  biblios[i,] # third record
+    variables &lt;-  list(data=list(id=biblio$id), model=DEFAULT_MODEL)
+    parts &lt;-  list()
     for (col in colnames(biblio)){
         if (col!= &#39;id&#39;) {
             record &lt;-  data.frame(key=col, value=biblio[,c(col)])
-            data$parts &lt;-  rbind(parts, record)
+            parts &lt;-  rbind(parts, record)
         }
-        
+
     }
-    
-    variables &lt;-  list(data=data)
-    
+
+    variables$data$parts &lt;-  parts
+
     res &lt;-  conn$exec(new$link, variables = variables) %&gt;%
-        fromJSON(flatten = F)
-    
+         fromJSON(flatten = F)
+
+    # combine the data into a single dataframe
     row &lt;- data.frame(id=biblio$id)
-    row &lt;- cbind(row, data.frame(t(res$data$encodeDocument)))
+    row &lt;- cbind(row, data.frame(t(res$data$encodeDocuments)))
     df &lt;- rbind(df, row)
 
     }
 
-df[,1:5 ]</code></pre>
-<div data-pagedtable="false">
-<script data-pagedtable-source type="application/json">
-{"columns":[{"label":["id"],"name":[1],"type":["chr"],"align":["left"]},{"label":["X1"],"name":[2],"type":["dbl"],"align":["right"]},{"label":["X2"],"name":[3],"type":["dbl"],"align":["right"]},{"label":["X3"],"name":[4],"type":["dbl"],"align":["right"]},{"label":["X4"],"name":[5],"type":["dbl"],"align":["right"]}],"data":[{"1":"ML001","2":"-0.4321779","3":"-2.212762","4":"2.8510300","5":"0.8366918"},{"1":"ML002","2":"-2.9822397","3":"-3.664914","4":"0.8033744","5":"0.9932771"},{"1":"ML003","2":"-0.1344998","3":"-3.344281","4":"-3.3941715","5":"1.8903351"}],"options":{"columns":{"min":{},"max":[10]},"rows":{"min":[10],"max":[10]},"pages":{}}}
-  </script>
-</div>
+#df[,1:5 ]</code></pre>
 </div>
 <div id="find-similarity-between-user-supplied-documents" class="section level2">
 <h2>Find similarity between user supplied documents</h2>
-<pre class="r"><code>query &lt;- &#39;query encodeDocumentAndSimilarityCalculation($data: [EncodeObject]) {
-  encodeDocumentAndSimilarityCalculation(data: $data, similarityMetric: cosine) {
+<pre class="r"><code>query &lt;- &#39;query encodeDocumentAndSimilarityCalculation($data: [EncodeObject], $similarityMetric: similarityMetric, $model: String!) {
+  encodeDocumentAndSimilarityCalculation(
+    data: $data,
+    similarityMetric: $similarityMetric,
+    model: $model
+  ) {
     similarities
     xs {
       id
@@ -2004,7 +1996,7 @@ new &lt;- Query$new()$query(&#39;link&#39;, query)</code></pre>
 data = NULL
 for( i in 1:nrow(biblios)) {
     biblio = biblios[i,]
-    
+
     biblio
     record = NULL
     key_values = NULL
@@ -2014,15 +2006,15 @@ for( i in 1:nrow(biblios)) {
             key_values = rbind(key_values, data.frame(key=k, value = v))
         }
     }
-    
+
     record = list(id=biblio$id)
     record[[&quot;parts&quot;]]= key_values
-    
+
     data = rbind(data, record)
 }
 
 rownames(data)=1:nrow(data)
-variables = list(data=data.frame(data), metric=&#39;cosine&#39;)</code></pre>
+variables = list(data=data.frame(data), similarityMetric=&#39;cosine&#39;, model=DEFAULT_MODEL)</code></pre>
 <pre class="r"><code>res &lt;-  conn$exec(new$link, variables = variables) %&gt;%
      fromJSON(flatten = F)
 
@@ -2033,99 +2025,50 @@ rownames(df) &lt;- t(res$data$encodeDocumentAndSimilarityCalculation$ys)
 df</code></pre>
 <div data-pagedtable="false">
 <script data-pagedtable-source type="application/json">
-{"columns":[{"label":[""],"name":["_rn_"],"type":[""],"align":["left"]},{"label":["ML001"],"name":[1],"type":["dbl"],"align":["right"]},{"label":["ML002"],"name":[2],"type":["dbl"],"align":["right"]},{"label":["ML003"],"name":[3],"type":["dbl"],"align":["right"]}],"data":[{"1":"1.0000000","2":"0.8112392","3":"0.5571356","_rn_":"ML001"},{"1":"0.8112392","2":"1.0000000","3":"0.5492929","_rn_":"ML002"},{"1":"0.5571356","2":"0.5492929","3":"1.0000000","_rn_":"ML003"}],"options":{"columns":{"min":{},"max":[10]},"rows":{"min":[10],"max":[10]},"pages":{}}}
+{"columns":[{"label":[""],"name":["_rn_"],"type":[""],"align":["left"]},{"label":["ML001"],"name":[1],"type":["dbl"],"align":["right"]},{"label":["ML002"],"name":[2],"type":["dbl"],"align":["right"]},{"label":["ML003"],"name":[3],"type":["dbl"],"align":["right"]}],"data":[{"1":"1.0000000","2":"0.9697906","3":"0.9458891","_rn_":"ML001"},{"1":"0.9697906","2":"1.0000000","3":"0.9391220","_rn_":"ML002"},{"1":"0.9458891","2":"0.9391220","3":"1.0000000","_rn_":"ML003"}],"options":{"columns":{"min":{},"max":[10]},"rows":{"min":[10],"max":[10]},"pages":{}}}
   </script>
 </div>
 </div>
 <div id="find-n-similar-documents" class="section level2">
 <h2>Find n similar documents</h2>
-<pre class="r"><code>query = &#39;query embedDocumentAndSimilaritySearch($data: [EncodeDocumentPart], $indices: [String], $amount: Int) {
-  encodeDocumentAndSimilaritySearch(
-    data: $data
-    indices: $indices
-    amount: $amount
-  ) {
-    document {
-      documentParts {
-        title
-      }
-    }
-    id
-    score
-    index
-  }
-}
-&#39;
-
-new &lt;- Query$new()$query(&#39;link&#39;, query)
-
-    # prepare data
-    biblio = biblios[3,] # third record
-    variables = list(indices=indices, amount=3)
-    parts = list()
-
-    for (col in colnames(biblio)){
-        if (col!= &#39;id&#39;) {
-            record = data.frame(key=col, value=biblio[,c(col)])
-            parts = rbind(parts, record)
-        }
-        
-    }
-
-    variables$data &lt;-  parts
-
-    res &lt;-  conn$exec(new$link, variables = variables) %&gt;%
-         fromJSON(flatten = F)
-
-    # combine the data into a single dataframe
-    results = res$data$encodeDocumentAndSimilaritySearch[c(&quot;index&quot;,&quot;score&quot;)]
-    info = res$data$encodeDocumentAndSimilaritySearch$document$documentParts
-    results = cbind(results, info)
-    results</code></pre>
-<div data-pagedtable="false">
-<script data-pagedtable-source type="application/json">
-{"columns":[{"label":[""],"name":["_rn_"],"type":[""],"align":["left"]},{"label":["index"],"name":[1],"type":["chr"],"align":["left"]},{"label":["score"],"name":[2],"type":["dbl"],"align":["right"]},{"label":["title"],"name":[3],"type":["chr"],"align":["left"]}],"data":[{"1":"semanticscholar_cos","2":"1.0000001","3":"Opening the black box of neural networks: methods for interpreting neural network models in clinical applications.","_rn_":"1"},{"1":"semanticscholar_cos","2":"0.9085948","3":"Entering the black box of neural networks.","_rn_":"2"},{"1":"semanticscholar_cos","2":"0.9082638","3":"Combining the Performance Strengths of the Logistic Regression and Neural Network Models: A Medical Outcomes Approach","_rn_":"3"},{"1":"wipo_cos","2":"0.8767278","3":"SYSTEMS AND METHODS TO SUPPORT MEDICAL THERAPY DECISIONS","_rn_":"4"},{"1":"uspto_cos","2":"0.8709986","3":"SYSTEMS AND METHODS TO SUPPORT MEDICAL THERAPY DECISIONS","_rn_":"5"},{"1":"wipo_cos","2":"0.8672115","3":"ARTIFICIAL NEURAL NETWORK FOR PREDICTING RESPIRATORY DISTURBANCES AND METHOD FOR DEVELOPING THE SAME","_rn_":"6"},{"1":"uspto_cos","2":"0.8666176","3":"Optimizing neural networks for risk assessment","_rn_":"7"},{"1":"uspto_cos","2":"0.8657595","3":"Knowledge-based interpretable predictive model for survival analysis","_rn_":"8"},{"1":"wipo_cos","2":"0.8649011","3":"SELF-EVOLVING PREDICTIVE MODEL","_rn_":"9"},{"1":"epo_cos","2":"0.8550629","3":"OPTIMIZING NEURAL NETWORKS FOR RISK ASSESSMENT","_rn_":"10"},{"1":"epo_cos","2":"0.8371776","3":"SYSTEM AND METHOD FOR PREDICTING THE RISK OF A PATIENT TO DEVELOP AN ATHEROSCLEROTIC CARDIOVASCULAR DISEASE","_rn_":"11"},{"1":"epo_cos","2":"0.8364545","3":"CLINICAL PREDICTIVE ANALYTICS SYSTEM","_rn_":"12"}],"options":{"columns":{"min":{},"max":[10]},"rows":{"min":[10],"max":[10]},"pages":{}}}
-  </script>
-</div>
-<div id="with-json" class="section level3">
-<h3>With JSON</h3>
-<pre class="r"><code>json_text &lt;-&#39;{&quot;id&quot;:&quot;20130226771&quot;,&quot;index&quot;:&quot;uspto_cos&quot;,&quot;amount&quot;:25,&quot;indices&quot;:[&quot;uspto_cos&quot;,&quot;wipo_cos&quot;,&quot;epo_cos&quot;]}&#39;
-
-fromJSON(json_text)</code></pre>
-<pre><code>## $id
-## [1] &quot;20130226771&quot;
-## 
-## $index
-## [1] &quot;uspto_cos&quot;
-## 
-## $amount
-## [1] 25
-## 
-## $indices
-## [1] &quot;uspto_cos&quot; &quot;wipo_cos&quot;  &quot;epo_cos&quot;</code></pre>
 <pre class="r"><code>variables &lt;-  fromJSON(&#39;{
-  &quot;id&quot;: &quot;20130226771&quot;,
-  &quot;index&quot;: &quot;uspto_cos&quot;,
-  &quot;amount&quot;: &quot;10&quot;,
+  &quot;model&quot;: &quot;patspecter&quot;,
+  &quot;data&quot;: [
+    {
+      &quot;key&quot;: &quot;title&quot;,
+      &quot;value&quot;: &quot;Airbags&quot;
+    },
+    {
+      &quot;key&quot;: &quot;abstract&quot;,
+      &quot;value&quot;: &quot;Airbags are one of the most important safety gears in motor vehicles such as cars and SUVs. These are cushions built into a vehicle that are intended to inflate in case of a car accident in order to protect occupants from injuries by preventing them from striking the interior of vehicle during a crash.&quot;
+    }
+  ],
+  &quot;amount&quot;: 25,
   &quot;indices&quot;: [
-    &quot;uspto_cos&quot;,
-    &quot;wipo_cos&quot;,
-    &quot;epo_cos&quot;
+    &quot;patents&quot;,
+    &quot;publications&quot;
   ]
 }&#39;)
 
 
-conn &lt;- GraphqlClient$new(url = URL,  headers = list(Authorization = API_KEY))
-query = &#39;query SimilaritySearch($index: String!, $id: String!, $amount: Int, $indices: [String]) {
-  SimilaritySearch(index: $index, id: $id, amount: $amount, indices: $indices) {
-    document {
-      documentParts {
-        title
-      }
-    }
+conn &lt;- GraphqlClient$new(
+  url = URL,
+  headers = list(Authorization = API_KEY)
+)
+query = &#39;query embedDocumentAndSimilaritySearch($data: [EncodeDocumentPart], $indices: [String], $amount: Int, $model: String!) {
+  encodeDocumentAndSimilaritySearch(
+    data: $data
+    indices: $indices
+    amount: $amount
+    model: $model
+  ) {
     id
     score
     index
+    document {
+      title
+      url
+    }
   }
 }
 &#39;
@@ -2133,72 +2076,14 @@ query = &#39;query SimilaritySearch($index: String!, $id: String!, $amount: Int,
 new &lt;- Query$new()$query(&#39;link&#39;, query)
 
 res = conn$exec(new$link, variables = variables) %&gt;%
-    fromJSON(flatten = F)
+    fromJSON(flatten = T
+             )
 
-res$data</code></pre>
-<pre><code>## $SimilaritySearch
-##                                                                                                        title
-## 1                                                                                  COMPLEX TRADING MECHANISM
-## 2                                                                             A TRADING APPARATUS AND METHOD
-## 3                                                                           MULTIPLE PROTOCOL TRADING SYSTEM
-## 4                                                       Electronic trading system restricting trading orders
-## 5                                                                           Managing outlying trading orders
-## 6                                                                           MANAGING OUTLYING TRADING ORDERS
-## 7                                                         DYNAMIC PEG ORDERS IN AN ELECTRONIC TRADING SYSTEM
-## 8                                                         Dynamic peg orders in an electronic trading system
-## 9                                                         Dynamic Peg Orders in an Electronic Trading System
-## 10                                                        DYNAMIC PEG ORDERS IN AN ELECTRONIC TRADING SYSTEM
-## 11 Hybrid trading system for concurrently trading through both electronic and open-outcry trading mechanisms
-## 12                                                                             AGGREGATION OF TRADING ORDERS
-## 13                                                                      SYSTEM FOR SUBMITTING TRADING ORDERS
-## 14                              SYSTEM FOR APPORTIONING TRADING ORDERS BASED ON SIZE OF DISPLAYED QUANTITIES
-## 15                                                       METHODS AND APPARATUS FOR ROUTING SECURITIES ORDERS
-## 16                                     SYSTEM AND METHOD FOR PROCESSING COMPOSITE TRADING ORDERS AT A CLIENT
-## 17                                                         SYSTEM FOR OPTIMIZING EXECUTION OF TRADING ORDERS
-## 18                                                   OPERATIONALIZATION SYSTEM OF A STOCK MARKET TRANSACTION
-## 19                                                                                              TEST TRADING
-## 20                                                                     CONFIGURABLE ANONYMOUS TRADING SYSTEM
-## 21                                                Systems and methods for Bid/Offer liquidity spread trading
-## 22                                                Systems and methods for Bid/Offer liquidity spread trading
-## 23                                                Systems and methods for Bid/Offer liquidity spread trading
-## 24                                     TRADING METHOD FOR TRADING BETWEEN TRADING SYSTEMS AND TRADING SYSTEM
-## 25                                                                            A TRADING APPARATUS AND METHOD
-## 26                                                                                            TRADING SYSTEM
-## 27                                                                                            TRADING SYSTEM
-## 28                                             A method and apparatus for automated order protection trading
-## 29                                             A method and apparatus for automated order protection trading
-## 30                              System for managing trading using alert messages for outlying trading orders
-##                id     index     score
-## 1     20130226771 uspto_cos 1.0000000
-## 2  WO2011094235A2  wipo_cos 0.9006688
-## 3  WO2007041393A2  wipo_cos 0.8980032
-## 4        08756137 uspto_cos 0.8968011
-## 5        08788400 uspto_cos 0.8939934
-## 6     20130085922 uspto_cos 0.8936393
-## 7     20190066211 uspto_cos 0.8926235
-## 8        10185993 uspto_cos 0.8926235
-## 9     20160055581 uspto_cos 0.8926235
-## 10    20200167866 uspto_cos 0.8905190
-## 11    20060149659 uspto_cos 0.8904536
-## 12    20160048916 uspto_cos 0.8902739
-## 13 WO2007019405A2  wipo_cos 0.8890142
-## 14 WO2007019402A2  wipo_cos 0.8847001
-## 15 WO2005057458A1  wipo_cos 0.8834170
-## 16 WO2007075620A2  wipo_cos 0.8825544
-## 17 WO2007126838A1  wipo_cos 0.8816818
-## 18 WO2009132408A1  wipo_cos 0.8793858
-## 19 WO2008122001A2  wipo_cos 0.8791765
-## 20 WO2001098965A2  wipo_cos 0.8788960
-## 21   EP10075591A3   epo_cos 0.8719674
-## 22   EP10075591A2   epo_cos 0.8719674
-## 23   EP04254861A1   epo_cos 0.8719674
-## 24   EP05782274A1   epo_cos 0.8702775
-## 25   EP20000200A1   epo_cos 0.8672298
-## 26   EP06843187A2   epo_cos 0.8657038
-## 27 EP06843187A9W1   epo_cos 0.8657038
-## 28   EP06001738A2   epo_cos 0.8608356
-## 29   EP06001738A3   epo_cos 0.8608356
-## 30   EP12004959A1   epo_cos 0.8606036</code></pre>
+res$data$encodeDocumentAndSimilaritySearch %&gt;% as_tibble()</code></pre>
+<div data-pagedtable="false">
+<script data-pagedtable-source type="application/json">
+{"columns":[{"label":["id"],"name":[1],"type":["chr"],"align":["left"]},{"label":["index"],"name":[2],"type":["chr"],"align":["left"]},{"label":["score"],"name":[3],"type":["dbl"],"align":["right"]},{"label":["document.title"],"name":[4],"type":["chr"],"align":["left"]},{"label":["document.url"],"name":[5],"type":["chr"],"align":["left"]}],"data":[{"1":"81182560","2":"patents","3":"0.9815658","4":"Vehicle Body Protection Airbags","5":"https://worldwide.espacenet.com/patent/search?q=KR20220042520A"},{"1":"67774322","2":"patents","3":"0.9813265","4":"Airbag for vehicle","5":"https://worldwide.espacenet.com/patent/search?q=DE102018120159A1"},{"1":"38618771","2":"patents","3":"0.9791321","4":"Airbag device","5":"https://worldwide.espacenet.com/patent/search?q=US2007246919A1"},{"1":"42367094","2":"patents","3":"0.9789898","4":"DRIVER AIR BAG FOR A VEHICLE","5":"https://worldwide.espacenet.com/patent/search?q=KR20100068908A"},{"1":"W3158166756","2":"publications","3":"0.9785665","4":"Airbag used in automobile","5":"https://openalex.org/works/W3158166756"},{"1":"50606930","2":"patents","3":"0.9784822","4":"AIRBAG ARRANGEMENT STRUCTURE","5":"https://worldwide.espacenet.com/patent/search?q=JP2014046841A"},{"1":"W1968029760","2":"publications","3":"0.9783213","4":"Air bag deployment and injury reduction","5":"https://openalex.org/works/W1968029760"},{"1":"26934061","2":"patents","3":"0.9781507","4":"MULTIPLE PANEL AIRBAG AND METHOD","5":"https://worldwide.espacenet.com/patent/search?q=WO0232725A1"},{"1":"80935706","2":"patents","3":"0.9779736","4":"CURTAIN AIRBAG FOR VEHICLE","5":"https://worldwide.espacenet.com/patent/search?q=KR102465245B1"},{"1":"45036539","2":"patents","3":"0.9779061","4":"AIRBAG FOR VEHICLE","5":"https://worldwide.espacenet.com/patent/search?q=JP2011219016A"},{"1":"67103208","2":"patents","3":"0.9777515","4":"AIR BAG DEVICE FOR VIEHICLE","5":"https://worldwide.espacenet.com/patent/search?q=KR102461508B1"},{"1":"39384995","2":"patents","3":"0.9776958","4":"A Curtain air-bag in vehicles","5":"https://worldwide.espacenet.com/patent/search?q=KR101360340B1"},{"1":"69514596","2":"patents","3":"0.9776255","4":"Bicycle Airbag","5":"https://worldwide.espacenet.com/patent/search?q=KR20200012339A"},{"1":"42230225","2":"patents","3":"0.9776200","4":"External airbag system for vehicles","5":"https://worldwide.espacenet.com/patent/search?q=KR101033790B1"},{"1":"33516217","2":"patents","3":"0.9775485","4":"Airbag apparatus, motorcycle equipped with airbag apparatus and manufacturing method of airbag apparatus","5":"https://worldwide.espacenet.com/patent/search?q=CN100371192C"},{"1":"17291262","2":"patents","3":"0.9774439","4":"Airbag system","5":"https://worldwide.espacenet.com/patent/search?q=DE19742584A1"},{"1":"39230036","2":"patents","3":"0.9774146","4":"Airbag module with optimised interior volume","5":"https://worldwide.espacenet.com/patent/search?q=CN101519059A"},{"1":"36121591","2":"patents","3":"0.9771662","4":"Head supports with built-in airbags protect driver and passengers in motor vehicle against neck injury and wounds to head due to collisions on front or rear side or even on side edges","5":"https://worldwide.espacenet.com/patent/search?q=NL1030886C1"},{"1":"7673742","2":"patents","3":"0.9771650","4":"Impact protection for motor vehicles with non-inflated airbag engaging flat on vehicle component and gas generator system spread over airbag surface","5":"https://worldwide.espacenet.com/patent/search?q=DE10106436A1"},{"1":"43052067","2":"patents","3":"0.9770528","4":"Automobile with airbag outside","5":"https://worldwide.espacenet.com/patent/search?q=CN101879883A"},{"1":"W2036151397","2":"publications","3":"0.9769465","4":"Patterns of injury associated with automobile airbag use","5":"https://openalex.org/works/W2036151397"},{"1":"37566433","2":"patents","3":"0.9768448","4":"Headliner airbag","5":"https://worldwide.espacenet.com/patent/search?q=US2006290113A1"},{"1":"41304106","2":"patents","3":"0.9768319","4":"VEHICLE MOUNTING STRUCTURE OF AIRBAG DEVICE FOR REAR-END COLLISION","5":"https://worldwide.espacenet.com/patent/search?q=JP2009241674A"},{"1":"7814008","2":"patents","3":"0.9767632","4":"Side impact protection in road vehicle","5":"https://worldwide.espacenet.com/patent/search?q=DE19650940A1"},{"1":"41724171","2":"patents","3":"0.9767560","4":"Exterior airbag for vehicles","5":"https://worldwide.espacenet.com/patent/search?q=KR101020549B1"},{"1":"80816270","2":"patents","3":"0.9766953","4":"Car Front Airbag","5":"https://worldwide.espacenet.com/patent/search?q=KR20220029885A"},{"1":"41234118","2":"patents","3":"0.9766777","4":"Flood proofing and anti-collision safety airbag for sedan car","5":"https://worldwide.espacenet.com/patent/search?q=CN201338578Y"},{"1":"47845896","2":"patents","3":"0.9766428","4":"AIRBAG","5":"https://worldwide.espacenet.com/patent/search?q=DE102012003746A1"},{"1":"W4388200591","2":"publications","3":"0.9762234","4":"Review of Airbag Injuries: A Sri Lankan Case Series","5":"https://openalex.org/works/W4388200591"},{"1":"W2152685247","2":"publications","3":"0.9760926","4":"On burn injuries related to airbag deployment","5":"https://openalex.org/works/W2152685247"},{"1":"W2053673031","2":"publications","3":"0.9759624","4":"Morphing cars protect pedestrians from collisions","5":"https://openalex.org/works/W2053673031"},{"1":"W632472404","2":"publications","3":"0.9756020","4":"Combination Side Airbags Reduce Death and Injury Risk","5":"https://openalex.org/works/W632472404"},{"1":"W649029835","2":"publications","3":"0.9755614","4":"Airbag Technology Softens the Blow","5":"https://openalex.org/works/W649029835"},{"1":"W4306694102","2":"publications","3":"0.9751800","4":"A Modern Approach for Bike Safety Globule System","5":"https://openalex.org/works/W4306694102"},{"1":"W2117948127","2":"publications","3":"0.9748517","4":"Side-curtain air bag is a protective item: an effective necessity","5":"https://openalex.org/works/W2117948127"},{"1":"W581365792","2":"publications","3":"0.9743925","4":"SEATBELTS THAT THINK LIKE AIRBAGS. THE SMARTBELT SYSTEMS FROM BFGOODRICH CO","5":"https://openalex.org/works/W581365792"},{"1":"W1978384217","2":"publications","3":"0.9743274","4":"Chemical Burn from an Airbag","5":"https://openalex.org/works/W1978384217"},{"1":"W4309761027","2":"publications","3":"0.9741971","4":"What’s that stuff? Airbags","5":"https://openalex.org/works/W4309761027"},{"1":"W2173096028","2":"publications","3":"0.9738253","4":"Study on Airbag Concept for Motorcycles Using Opposing Vehicle as Reaction Structure","5":"https://openalex.org/works/W2173096028"},{"1":"W2135655233","2":"publications","3":"0.9738164","4":"사고 사례를 통한 AirBag의 동작 영역 분석","5":"https://openalex.org/works/W2135655233"},{"1":"W2588603352","2":"publications","3":"0.9737276","4":"Face Burn Due to Airbag Trauma","5":"https://openalex.org/works/W2588603352"},{"1":"W2380543587","2":"publications","3":"0.9735483","4":"The Discussion of Automobile Safety Airbags","5":"https://openalex.org/works/W2380543587"},{"1":"W2339261707","2":"publications","3":"0.9734238","4":"승객보호용 랩을 적용한 저위험성 조수석 에어백의 미국 연방 자동차안전 기준법규에 의거한 시험과 평가","5":"https://openalex.org/works/W2339261707"},{"1":"W2059502229","2":"publications","3":"0.9730548","4":"Burns from automobile airbags","5":"https://openalex.org/works/W2059502229"},{"1":"W3011581830","2":"publications","3":"0.9730343","4":"SEATBELT-MOUNTED AIRBAG DESIGN FOR OCCUPANT PROTECTION IN TACTICAL VEHICLES DURING FRONTAL CRASHES","5":"https://openalex.org/works/W3011581830"},{"1":"W2543949213","2":"publications","3":"0.9730121","4":"저속 추돌 사고 시 에어백 팽창에 의한 손상","5":"https://openalex.org/works/W2543949213"},{"1":"W2006365319","2":"publications","3":"0.9729917","4":"INJURIES IN DRIVERS OF CARS EQUIPPED WITH AIRBAG","5":"https://openalex.org/works/W2006365319"},{"1":"W4366410050","2":"publications","3":"0.9727590","4":"Study on Suitscape: Biker Safety Innovation","5":"https://openalex.org/works/W4366410050"},{"1":"W1555839451","2":"publications","3":"0.9726114","4":"Airbag Bumpers Inflated Just Before the Crash","5":"https://openalex.org/works/W1555839451"},{"1":"W637197858","2":"publications","3":"0.9724673","4":"THE AIRBAG AS AN IMPROVEMENT OF FUTURE PASSENGER SAFETY","5":"https://openalex.org/works/W637197858"}],"options":{"columns":{"min":{},"max":[10]},"rows":{"min":[10],"max":[10]},"pages":{}}}
+  </script>
 </div>
 </div>
 </div>
