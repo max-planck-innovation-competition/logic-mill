@@ -1,75 +1,109 @@
 # use an external Python so that the Python code and Stata Code are not combined
+from urllib3.util import Retry
+from requests import Session
+from requests.adapters import HTTPAdapter
 
-from sfi import Data
 import pandas as pd
-import json
-import requests
 import sys
-from logic_mill import convert_json_response
+
+from dotenv import dotenv_values
+
+# Load environment variables from .env file
+conf = dotenv_values()
+API_KEY = conf["API_KEY"]
 
 
 def get_logic_mill_data(out_file):
-    url = 'https://api.logic-mill.net/api/v1/graphql/'
 
-    query = """
-    query embedDocumentAndSimilaritySearch($data: [EncodeDocumentPart], $indices: [String], $amount: Int) {
+
+    # Establish session for robust connection
+    s = Session()
+    retries = Retry(total=5, backoff_factor=0.1,
+                    status_forcelist=[500, 501, 502, 503, 504, 524])
+    s.mount('https://', HTTPAdapter(max_retries=retries))
+
+    # API settings
+    URL = 'https://api.logic-mill.net/api/v1/graphql/'
+    headers = {
+    'content-type': 'application/json',
+    'Authorization': 'Bearer '+ API_KEY,
+    }
+
+    # Build GraphQL query
+    query="""
+    query embedDocumentAndSimilaritySearch($data: [EncodeDocumentPart], $indices: [String], $amount: Int, $model: String!) {
     encodeDocumentAndSimilaritySearch(
         data: $data
         indices: $indices
         amount: $amount
+        model: $model
     ) {
-        document {
-        documentParts {
-            title
-        }
-        }
         id
         score
         index
+        document {
+        title
+        url
+        PatspecterEmbedding
+        }
     }
     }
     """
 
-    # build variables
+    # Build variables
     variables = {
-        "data": [
-            {
-                "key": "title",
-                "value": "LoRA: Low-Rank Adaptation of Large Language Models"
-            },
-            {
-                "key": "abstract",
-                "value": "An important paradigm of natural language processing consists of large-scale pre-training on general domain data and adaptation to particular tasks or domains. As we pre-train larger models, full fine-tuning, which retrains all model parameters, becomes less feasible. Using GPT-3 175B as an example -- deploying independent instances of fine-tuned models, each with 175B parameters, is prohibitively expensive. We propose Low-Rank Adaptation, or LoRA, which freezes the pre-trained model weights and injects trainable rank decomposition matrices into each layer of the Transformer architecture, greatly reducing the number of trainable parameters for downstream tasks. Compared to GPT-3 175B fine-tuned with Adam, LoRA can reduce the number of trainable parameters by 10,000 times and the GPU memory requirement by 3 times. LoRA performs on-par or better than fine-tuning in model quality on RoBERTa, DeBERTa, GPT-2, and GPT-3, despite having fewer trainable parameters, a higher training throughput, and, unlike adapters, no additional inference latency. We also provide an empirical investigation into rank-deficiency in language model adaptation, which sheds light on the efficacy of LoRA. We release a package that facilitates the integration of LoRA with PyTorch models and provide our implementations and model checkpoints for RoBERTa, DeBERTa, and GPT-2 at"
-            }
-        ],
-        "amount": "5",
-        "indices": [
-            "wipo_cos",
-            "semanticscholar_cos"
-        ]
+    "model": "patspecter",
+    "data": [
+        {
+        "key": "title",
+        "value": "Airbags"
+        },
+        {
+        "key": "abstract",
+        "value": "Airbags are one of the most important safety gears in motor vehicles such as cars and SUVs. These are cushions built into a vehicle that are intended to inflate in case of a car accident in order to protect occupants from injuries by preventing them from striking the interior of vehicle during a crash."
+        }
+    ],
+    "amount": 25,
+    "indices": [
+        "patents",
+        "publications"
+    ]
     }
 
-    headers = {
-        'content-type': 'application/json',
-        'Authorization': API_KEY,
-    }
+    # Send request
+    r = s.post(URL, headers=headers, json={'query': query , 'variables': variables})
 
-    r = requests.post(url, headers=headers, json={
-        'query': query, 'variables': variables})
+    # Handle response
+    if r.status_code != 200:
+        print(f"Error executing\n{query}\non {URL}")
+    else:
+        response = r.json()
+        df = pd.json_normalize(response['data']['encodeDocumentAndSimilaritySearch'])
 
-    if r.status_code == 200:
-        # These lines are different form the Website
-        similar_docs = convert_json_response(r.json())
-        similar_docs.to_stata(out_file, version=118, write_index=False)
+        # rename columns with '.'
+        df.columns = [c.replace(".", "_") for c in df.columns]
+
+        # Convert PatspecterEmbedding array to separate columns more efficiently
+        # Create a dictionary of embedding columns all at once
+        embedding_cols = {}
+        for i in range(len(df.document_PatspecterEmbedding.iloc[0])):
+            embedding_cols[f'embedding_{i}'] = df.document_PatspecterEmbedding.apply(lambda x: x[i])
+
+        # Create a new dataframe with all embeddings and join with original data
+        embedding_df = pd.DataFrame(embedding_cols)
+        df = pd.concat([df.drop('document_PatspecterEmbedding', axis=1), embedding_df], axis=1)
+
+        # Save to Stata format
+        df.to_stata(out_file, version=118, write_index=False)
 
 
 if __name__ == "__main__":
-    print(sys.argv)
-    if len(sys.argv) != 3:
-        print("Usage: python external.py out_stata_file.dta API_KEY")
+
+    if len(sys.argv) != 2:
+        print(sys.argv)
+        print("Usage: python external.py out_stata_file.dta")
         sys.exit(1)
 
     output_file = sys.argv[1]
-    API_KEY = sys.argv[2]
 
     get_logic_mill_data(output_file)
