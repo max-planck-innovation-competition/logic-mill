@@ -22,8 +22,6 @@ In the `/src` directory you will find examples no how to use the Logic Mill API 
 
 - [Go](src/go/)
 - [Python](src/python/)
-  - `basic-api-usage.ipynb`: basic Python examples
-  - `automatic_parsing.py`: automatically flattens the nested response to a data frame. This code has not been thoroughly tested yet.
 - [R](src/R/)
 - [Stata](src/stata/) (using Python)
   - `LogicMill.do`: `.do` file where the python is integrated
