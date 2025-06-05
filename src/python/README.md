@@ -6,13 +6,12 @@ This directory contains example Python scripts and Jupyter notebooks for interac
 
 The provided notebooks contain examples for each available API endpoint.
 
-- **Basic API Usage**: How to connect to the API, retrieve document metadata, and get embeddings.
-- **Retrieve Documents by ID**: Fetch metadata and embeddings for specific documents using their IDs.
 - **Encode Document**: Convert a single document (title and abstract) into an embedding.
 - **Encode Multiple Documents**: Batch encode several documents and compute similarities.
-- **Calculate Document Similarity**: Directly compute a similarity matrix between multiple documents.
-- **Document Similarity Search**: Find the most similar documents in the database to a given document.
+- **Calculate Similarity between Documents**: Directly compute a similarity matrix between multiple documents.
+- **Retrieve Documents by ID**: Fetch metadata and embeddings for specific documents using their IDs.
 - **Own Document Similarity Search**: Embed a user-supplied document and search for similar documents in the database.
+- **Database Document Similarity Search**: Find the most similar documents in the database to a given document.
 - **Pairwise Document Similarity**: Compute similarity scores between specific pairs of documents.
 
 ## Setup
