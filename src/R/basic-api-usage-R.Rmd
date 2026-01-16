@@ -144,7 +144,6 @@ query = 'query Documents($data: [DatabaseSearchDocument]) {
     applnAuth
     publNo
     familyCPCClasses
-    isParatext
     isRetracted
     PaecterEmbedding
     PatspecterEmbedding
