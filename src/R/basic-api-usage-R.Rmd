@@ -17,7 +17,7 @@ Add your API KEY in the `.env` file
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
-setwd("/Users/erik/Documents/Computer/Github/logic-mill/src/R")
+setwd(dirname(rstudioapi::getActiveDocumentContext()$path))
 readRenviron(".env")
 API_KEY <- paste('Bearer', Sys.getenv("API_KEY"))
 ```
@@ -132,7 +132,23 @@ query = 'query Documents($data: [DatabaseSearchDocument]) {
   Documents(data: $data) {
     id
     url
+    title
+    type
+    index
+    doi
+    pubmed
+    publicationDate
+    familyEarliestFilingDate
+    familyEarliestPriorityDate
+    applnID
+    applnAuth
+    publNo
+    familyCPCClasses
+    isParatext
+    isRetracted
+    PaecterEmbedding
     PatspecterEmbedding
+    Specter2Embedding
   }
 }
 '
@@ -246,14 +262,16 @@ Many time we may have the data available in some datastructure (CSV, Excel file,
 
 ```{r}
 # our data
-id <- c("ML001", "ML002", "ML003" )
+id <- c("ML001", "ML002", "ML003")
 title <- c('Towards A Rigorous Science of Interpretable Machine Learning',
            'Machine Learning Interpretability: A Science rather than a tool',
            'Opening the black box of neural networks: methods for interpreting neural network models in clinical applications'
-    )
-abstract <- c('As machine learning systems become ubiquitous, there has been a surge of interest in interpretable machine learning: systems that provide explanation for their outputs. These explanations are often used to qualitatively assess other criteria such as safety or non-discrimination. However, despite the interest in interpretability, there is very little consensus on what interpretable machine learning is and how it should be measured. In this position paper, we first define interpretability and describe when interpretability is needed (and when it is not). Next, we suggest a taxonomy for rigorous evaluation and expose open questions towards a more rigorous science of interpretable machine learning.',
-              'The term "interpretability" is oftenly used by machine learning researchers each with their own intuitive understanding of it. There is no universal well agreed upon definition of interpretability in machine learning. As any type of science discipline is mainly driven by the set of formulated questions rather than by different tools in that discipline, e.g. astrophysics is the discipline that learns the composition of stars, not as the discipline that use the spectroscopes. Similarly, we propose that machine learning interpretability should be a discipline that answers specific questions related to interpretability. These questions can be of statistical, causal and counterfactual nature. Therefore, there is a need to look into the interpretability problem of machine learning in the context of questions that need to be addressed rather than different tools. We discuss about a hypothetical interpretability framework driven by a question based scientific approach rather than some specific machine learning model. Using a question based notion of interpretability, we can step towards understanding the science of machine learning rather than its engineering. This notion will also help us understanding any specific problem more in depth rather than relying solely on machine learning methods',
-    "Artificial neural networks (ANNs) are powerful tools for data analysis and are particularly suitable for modeling relationships between variables for best prediction of an outcome. While these models can be used to answer many important research questions, their utility has been critically limited because the interpretation of the \"black box\" model is difficult. Clinical investigators usually employ ANN models to predict the clinical outcomes or to make a diagnosis; the model however is difficult to interpret for clinicians. To address this important shortcoming of neural network modeling methods, we describe several methods to help subject-matter audiences (e.g., clinicians, medical policy makers) understand neural network models. Garson's algorithm describes the relative magnitude of the importance of a descriptor (predictor) in its connection with outcome variables by dissecting the model weights. The Lek's profile method explores the relationship of the outcome variable and a predictor of interest, while holding other predictors at constant values (e.g., minimum, 20th quartile, maximum). While Lek's profile was developed specifically for neural networks, partial dependence plot is a more generic version that visualize the relationship between an outcome and one or two predictors. Finally, the local interpretable model-agnostic explanations (LIME) method can show the predictions of any classification or regression, by approximating it locally with an interpretable model. R code for the implementations of these methods is shown by using example data fitted with a standard, feed-forward neural network model. We offer codes and step-by-step description on how to use these tools to facilitate better understanding of ANN")
+           )
+
+# Note: Abstracts where truncated for brevity
+abstract <- c("As machine learning systems become ubiquitous, there has been a surge of interest in interpretable machine learning: systems that provide explanation for their outputs. These explanations are often used to qualitatively assess other criteria such as safety or non-discrimination. However, despite the interest in interpretability, there is very little consensus on what interpretable machine learning is and how it should be measured. In this position paper, we first define interpretability and describe when interpretability is needed (and when it is not). Next, we suggest a taxonomy for rigorous evaluation and expose open questions towards a more rigorous science of interpretable machine learning.",
+              "The term interpretability is oftenly used by machine learning researchers each with their own intuitive understanding of it. There is no universal well agreed upon definition of interpretability in machine learning. As any type of science discipline is mainly driven by the set of formulated questions rather than by different tools in that discipline, e.g. astrophysics is the discipline that learns the composition of stars, not as the discipline that use the spectroscopes. Similarly, we propose that machine learning interpretability should be a discipline that answers specific questions related to interpretability. These questions can be of statistical, causal and counterfactual nature.",
+              'Artificial neural networks (ANNs) are powerful tools for data analysis and are particularly suitable for modeling relationships between variables for best prediction of an outcome. While these models can be used to answer many important research questions, their utility has been critically limited because the interpretation of the \"black box\" model is difficult. Clinical investigators usually employ ANN models to predict the clinical outcomes or to make a diagnosis; the model however is difficult to interpret for clinicians. To address this important shortcoming of neural network modeling methods, we describe several methods to help subject-matter audiences (e.g., clinicians, medical policy makers) understand neural network models.')
 
 biblios = data.frame(id, title, abstract)
 biblios
@@ -318,7 +336,10 @@ res$data$encodeDocument %>% as_tibble()
 
 ```{r}
 query = 'query encodeDocuments($data: [EncodeObject], $model: String!) {
-  encodeDocuments(data: $data, model: $model)
+  encodeDocuments(data: $data, model: $model) {
+    id
+    embedding
+  }
 }'
 new <- Query$new()$query('link', query)
 
@@ -341,17 +362,18 @@ for (i in 1:length(biblios)){
     res <-  conn$exec(new$link, variables = variables) %>%
          fromJSON(flatten = F)
 
-
-
     # combine the data into a single dataframe
-    embedding = tibble(embedding=res$data$encodeDocuments)
-    row <- tibble(id=biblio$id, embedding=embedding)
+    # Extract both id and embedding from the response
+    row <- tibble(
+        id = res$data$encodeDocuments$id,
+        embedding = res$data$encodeDocuments$embedding
+    )
     df <- rbind(df, row)
 
-    }
+}
 
 df
-d```
+```
 
 ## Find similarity between user supplied documents
 
