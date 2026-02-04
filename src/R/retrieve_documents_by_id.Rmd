@@ -1,0 +1,207 @@
+---
+title: "Retrieve Documents by ID API"
+author: "Logic Mill"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    df_print: paged
+---
+
+This API retrieves documents (patents or publications) by their unique IDs and returns their metadata and embeddings. Useful for fetching and analyzing specific documents.
+
+## Setup
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+# Set working directory
+if (requireNamespace("rstudioapi", quietly = TRUE) && rstudioapi::isAvailable()) {
+  setwd(dirname(rstudioapi::getActiveDocumentContext()$path))
+}
+
+# Load environment variables
+if (file.exists(".env")) {
+  readRenviron(".env")
+}
+API_KEY <- paste('Bearer', Sys.getenv("API_KEY"))
+```
+
+```{r message=FALSE}
+library(httr)
+library(jsonlite)
+library(ghql)
+library(dplyr)
+library(ggplot2)
+
+# API URL and headers
+URL <- 'https://api.logic-mill.net/api/v1/graphql/'
+
+# Set up GraphQL client
+conn <- GraphqlClient$new(
+  url = URL,
+  headers = list(Authorization = API_KEY)
+)
+```
+
+## Retrieve Documents by ID
+
+```{r}
+# Build GraphQL query
+query <- 'query Documents($data: [DatabaseSearchDocument]) {
+  Documents(data: $data) {
+    id
+    url
+    title
+    type
+    index
+    doi
+    pubmed
+    publicationDate
+    applnID
+    applnAuth
+    publNo
+    familyCPCClasses
+    isRetracted
+    PaecterEmbedding
+    PatspecterEmbedding
+    Specter2Embedding
+  }
+}'
+
+# Build variables with document IDs
+variables <- fromJSON('{
+  "data": [
+    {
+      "index": "publications",
+      "id": "W2531700612"
+    },
+    {
+      "index": "publications",
+      "id": "10.1073/pnas.1208507109"
+    },
+    {
+      "index": "patents",
+      "id": "64440517"
+    },
+    {
+      "index": "patents",
+      "id": "US11394112B2"
+    }
+  ]
+}')
+
+# Execute query
+new <- Query$new()$query('link', query)
+res <- conn$exec(new$link, variables = variables) %>%
+    fromJSON(flatten = FALSE)
+```
+
+## View Results
+
+```{r}
+# Extract documents
+docs <- res$data$Documents
+
+# Create a summary table (excluding embeddings for display)
+doc_summary <- data.frame(
+  id = docs$id,
+  title = substr(docs$title, 1, 50),
+  type = docs$type,
+  index = docs$index,
+  publicationDate = ifelse(is.na(docs$publicationDate), NA, docs$publicationDate)
+)
+
+print(doc_summary)
+```
+
+## Multiple Document Retrieval
+
+The following example retrieves documents from three different subject fields and conducts clustering based on the retrieved embedding.
+
+```{r}
+# List of Open Alex IDs from different subject areas
+publications <- c(
+  "W4205325213", "W2163605009", "W4200466434",    # Publications on AI
+  "W1524757637", "W2165060880", "W2164274966",    # Publications on History
+  "W4389705108", "W4319971921", "W4384524750"     # Publications on Psychology
+)
+
+# Build variables for query
+variables_multi <- list(
+  data = lapply(publications, function(pub) list(index = "publications", id = pub))
+)
+
+# Execute query
+res_multi <- conn$exec(new$link, variables = variables_multi) %>%
+    fromJSON(flatten = FALSE)
+
+# Extract documents
+encoded_documents <- res_multi$data$Documents
+cat("Retrieved", nrow(encoded_documents), "documents\n")
+```
+
+## Clustering
+
+We can use the retrieved embeddings to cluster documents. The documents are clustered into their subject areas.
+
+```{r}
+# Extract embeddings from documents
+embeddings <- encoded_documents$PatspecterEmbedding
+
+# Convert to matrix
+X <- do.call(rbind, embeddings)
+
+# Perform K-means clustering into 3 clusters
+set.seed(42)
+kmeans_result <- kmeans(X, centers = 3, nstart = 25)
+
+# Print cluster assignments
+cat("Cluster Assignments:\n")
+for (i in seq_along(encoded_documents$id)) {
+  cat(sprintf("ID: %s - Cluster: %d\n", encoded_documents$id[i], kmeans_result$cluster[i]))
+}
+```
+
+## Dimensionality Reduction and Visualization of Clusters
+
+To better understand the clustering results, we can project the high-dimensional embeddings into two dimensions using PCA and plot them. Each point represents a document, colored by its cluster assignment.
+
+```{r fig.width=5, fig.height=4}
+# Perform PCA for dimensionality reduction
+pca_result <- prcomp(X, center = TRUE, scale. = FALSE)
+X_2d <- pca_result$x[, 1:2]
+
+# Create data frame for plotting
+plot_df <- data.frame(
+  PC1 = X_2d[, 1],
+  PC2 = X_2d[, 2],
+  Cluster = as.factor(kmeans_result$cluster),
+  ID = encoded_documents$id
+)
+
+# Create scatter plot
+ggplot(plot_df, aes(x = PC1, y = PC2, color = Cluster)) +
+  geom_point(size = 4) +
+  geom_text(aes(label = ID), hjust = -0.1, vjust = 0, size = 3, alpha = 0.7) +
+  scale_color_viridis_d() +
+  theme_minimal() +
+  labs(title = "KMeans Clustering of Documents (2D PCA Projection)",
+       x = "PCA Component 1",
+       y = "PCA Component 2") +
+  theme(legend.position = "right")
+```
+
+## Subject Area Labels
+
+```{r}
+# Add subject area labels
+subject_areas <- c(rep("AI", 3), rep("History", 3), rep("Psychology", 3))
+
+cat("\nDocument Subject Areas vs Cluster Assignments:\n")
+comparison_df <- data.frame(
+  ID = encoded_documents$id,
+  Subject = subject_areas,
+  Cluster = kmeans_result$cluster
+)
+print(comparison_df)
+```
