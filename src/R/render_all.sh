@@ -2,7 +2,7 @@
 
 # Script to render all R Markdown files to HTML
 # 
-# Usage:
+# Usage (from src/R/ directory):
 #   bash render_all.sh              # Render all .Rmd files in current directory
 #   bash render_all.sh /path/to/dir # Render all .Rmd files in specified directory
 

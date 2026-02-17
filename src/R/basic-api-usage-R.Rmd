@@ -140,7 +140,6 @@ query = 'query Documents($data: [DatabaseSearchDocument]) {
     publicationDate
     familyEarliestFilingDate
     familyEarliestPriorityDate
-    applnID
     applnAuth
     publNo
     familyCPCClasses
