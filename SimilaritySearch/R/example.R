@@ -4,7 +4,6 @@
 library(httr)
 library(jsonlite)
 library(ghql)
-library(dplyr)
 library(ggplot2)
 library(wordcloud)
 library(tm)
@@ -56,7 +55,7 @@ variables <- fromJSON('{
 
 # Execute query
 new <- Query$new()$query('link', query)
-res <- conn$exec(new$link, variables = variables) %>%
+res <- conn$exec(new$link, variables = variables) |>
     fromJSON(flatten = FALSE)
 
 # Extract documents

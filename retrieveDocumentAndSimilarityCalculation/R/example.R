@@ -4,7 +4,6 @@
 library(httr)
 library(jsonlite)
 library(ghql)
-library(dplyr)
 library(ggplot2)
 library(igraph)
 
@@ -56,7 +55,7 @@ variables <- list(
 
 # Execute query
 new <- Query$new()$query('link', query)
-res <- conn$exec(new$link, variables = variables) %>%
+res <- conn$exec(new$link, variables = variables) |>
     fromJSON(flatten = FALSE)
 
 # Extract results
@@ -98,7 +97,7 @@ variables_ext <- list(
   model = "patspecter"
 )
 
-res_ext <- conn$exec(new$link, variables = variables_ext) %>%
+res_ext <- conn$exec(new$link, variables = variables_ext) |>
     fromJSON(flatten = FALSE)
 
 results_ext <- res_ext$data$retrieveDocumentAndSimilarityCalculation

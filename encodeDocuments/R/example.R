@@ -4,7 +4,6 @@
 library(httr)
 library(jsonlite)
 library(ghql)
-library(dplyr)
 library(ggplot2)
 
 # Load environment variables
@@ -68,7 +67,7 @@ variables <- fromJSON('{
 
 # Execute query
 new <- Query$new()$query('link', query)
-res <- conn$exec(new$link, variables = variables) %>%
+res <- conn$exec(new$link, variables = variables) |>
     fromJSON(flatten = FALSE)
 
 # Extract encoded documents
@@ -107,7 +106,7 @@ variables_multi <- list(
 )
 
 # Execute query
-res_multi <- conn$exec(new$link, variables = variables_multi) %>%
+res_multi <- conn$exec(new$link, variables = variables_multi) |>
     fromJSON(flatten = FALSE)
 
 # Extract results

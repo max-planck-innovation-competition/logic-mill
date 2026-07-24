@@ -4,7 +4,7 @@
 library(httr)
 library(jsonlite)
 library(ghql)
-library(dplyr)
+
 
 # Load environment variables
 readRenviron(".env")
@@ -48,7 +48,7 @@ variables <- fromJSON('{
 # Execute query
 new <- Query$new()$query('link', query)
 
-res <- conn$exec(new$link, variables = variables) %>%
+res <- conn$exec(new$link, variables = variables) |>
     fromJSON(flatten = FALSE)
 
 # Get the embedding
@@ -72,7 +72,7 @@ variables2 <- list(
 )
 
 # Execute query
-res2 <- conn$exec(new$link, variables = variables2) %>%
+res2 <- conn$exec(new$link, variables = variables2) |>
     fromJSON(flatten = FALSE)
 
 # Print first 10 dimensions
