@@ -18,16 +18,19 @@ In order to use the Logic Mill endpoint you need an API key. Check your profile 
 
 # Examples
 
-In the `/src` directory you will find examples no how to use the Logic Mill API in several languages. We have examples in:
+Examples are organised by **API endpoint**, with self-contained language subfolders:
 
-- [Go](src/go/)
-- [Python](src/python/)
-- [R](src/R/)
-- [Stata](src/stata/) (using Python)
-  - `LogicMill.do`: `.do` file where the python is integrated
-  - `external.do`: `.do` file with external python files (`external.py` and `logic_mill.py`). It also has automated flattening of the JSON response. Not completely tested.
-  - When running/integrating with Stata you probably also want to take a look at the Python examples for the different endpoints and the code for flattening the data.
-- Javascript. No specific examples have been added, but the Logic Mill website has Javascript as one of the previews.
+| Endpoint | Python | R | Go | Stata |
+|----------|--------|---|----|-------|
+| [Documents](Documents/) | [Python](Documents/python/) | [R](Documents/R/) | | |
+| [SimilaritySearch](SimilaritySearch/) | [Python](SimilaritySearch/python/) | [R](SimilaritySearch/R/) | | |
+| [encodeDocument](encodeDocument/) | [Python](encodeDocument/python/) | [R](encodeDocument/R/) | [Go](encodeDocument/go/) | |
+| [encodeDocuments](encodeDocuments/) | [Python](encodeDocuments/python/) | [R](encodeDocuments/R/) | | |
+| [encodeDocumentAndSimilaritySearch](encodeDocumentAndSimilaritySearch/) | [Python](encodeDocumentAndSimilaritySearch/python/) | [R](encodeDocumentAndSimilaritySearch/R/) | | [Stata](encodeDocumentAndSimilaritySearch/Stata/) |
+| [encodeDocumentAndSimilarityCalculation](encodeDocumentAndSimilarityCalculation/) | [Python](encodeDocumentAndSimilarityCalculation/python/) | [R](encodeDocumentAndSimilarityCalculation/R/) | | |
+| [retrieveDocumentAndSimilarityCalculation](retrieveDocumentAndSimilarityCalculation/) | [Python](retrieveDocumentAndSimilarityCalculation/python/) | [R](retrieveDocumentAndSimilarityCalculation/R/) | | |
+
+Each language folder has its own `README.md` with setup instructions and a link to the corresponding API documentation.
 
 # Bug reports and feature requests
 
