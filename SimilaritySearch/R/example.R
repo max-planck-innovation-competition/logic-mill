@@ -1,32 +1,6 @@
----
-title: "Document Similarity Search API"
-author: "Logic Mill"
-date: "`r Sys.Date()`"
-output:
-  html_document:
-    df_print: paged
----
+# Document Similarity Search API
+# Find similar documents to one already in the database.
 
-This API finds documents similar to a given document (by ID) within and across specified indices (e.g., patents, publications), returning the most similar results and their similarity scores.
-
-## Setup
-
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
-
-# Set working directory
-if (requireNamespace("rstudioapi", quietly = TRUE) && rstudioapi::isAvailable()) {
-  setwd(dirname(rstudioapi::getActiveDocumentContext()$path))
-}
-
-# Load environment variables
-if (file.exists(".env")) {
-  readRenviron(".env")
-}
-API_KEY <- paste('Bearer', Sys.getenv("API_KEY"))
-```
-
-```{r message=FALSE}
 library(httr)
 library(jsonlite)
 library(ghql)
@@ -34,6 +8,10 @@ library(dplyr)
 library(ggplot2)
 library(wordcloud)
 library(tm)
+
+# Load environment variables
+readRenviron(".env")
+API_KEY <- paste('Bearer', Sys.getenv("API_KEY"))
 
 # API URL and headers
 URL <- 'https://api.logic-mill.net/api/v1/graphql/'
@@ -43,11 +21,7 @@ conn <- GraphqlClient$new(
   url = URL,
   headers = list(Authorization = API_KEY)
 )
-```
 
-## Search for Similar Documents by ID
-
-```{r}
 # Build GraphQL query
 query <- 'query SimilaritySearch($index: String!, $id: String!, $amount: Int, $indices: [String], $model: String!) {
   SimilaritySearch(
@@ -84,11 +58,7 @@ variables <- fromJSON('{
 new <- Query$new()$query('link', query)
 res <- conn$exec(new$link, variables = variables) %>%
     fromJSON(flatten = FALSE)
-```
 
-## View Results
-
-```{r}
 # Extract documents
 documents <- res$data$SimilaritySearch
 
@@ -101,13 +71,9 @@ df <- data.frame(
 )
 
 head(df, 10)
-```
 
-## Word Cloud
+# --- Word Cloud ---
 
-The following visualization displays a word cloud generated from the titles of the most similar documents found by the Document Similarity Search API. Each word's size in the cloud is weighted by the similarity score of the document(s) in which it appears, giving greater prominence to words from more relevant documents.
-
-```{r fig.width=10, fig.height=8}
 # Combine all titles, weighted by their similarity score
 titles <- documents$document$title
 scores <- documents$score
@@ -115,18 +81,15 @@ scores <- documents$score
 # Build word frequency weighted by score
 word_freq <- list()
 for (i in seq_along(titles)) {
-  # Tokenize and clean words
   words <- unlist(strsplit(tolower(titles[i]), "\\s+"))
   words <- gsub("[^a-z]", "", words)
   words <- words[nchar(words) > 2]
-  
-  # Remove common stopwords
-  stopwords_list <- c("the", "and", "for", "with", "from", "that", "this", "are", 
+
+  stopwords_list <- c("the", "and", "for", "with", "from", "that", "this", "are",
                       "was", "were", "been", "being", "have", "has", "had", "its",
                       "which", "can", "may", "will", "would", "could", "should")
   words <- words[!words %in% stopwords_list]
-  
-  # Add to frequency list with score weighting
+
   for (word in words) {
     if (is.null(word_freq[[word]])) {
       word_freq[[word]] <- scores[i]
@@ -144,14 +107,13 @@ freq_df <- data.frame(
 
 # Generate word cloud
 if (nrow(freq_df) > 0) {
-  wordcloud(words = freq_df$word, 
-            freq = freq_df$freq, 
+  wordcloud(words = freq_df$word,
+            freq = freq_df$freq,
             min.freq = 0.1,
             max.words = 100,
             random.order = FALSE,
-            colors = c("#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", 
+            colors = c("#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd",
                        "#8c564b", "#e377c2", "#7f7f7f", "#bcbd22", "#17becf"),
             scale = c(3, 0.5))
   title("Word Cloud Weighted by Similarity Score")
 }
-```

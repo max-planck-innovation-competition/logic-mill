@@ -1,38 +1,16 @@
----
-title: "Pairwise Document Similarity API"
-author: "Logic Mill"
-date: "`r Sys.Date()`"
-output:
-  html_document:
-    df_print: paged
----
+# Pairwise Document Similarity API
+# Compute similarity between specific pairs of documents by ID.
 
-This API computes the similarity between specific pairs of documents (by ID and index), allowing for targeted comparison between selected documents.
-
-## Setup
-
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
-
-# Set working directory
-if (requireNamespace("rstudioapi", quietly = TRUE) && rstudioapi::isAvailable()) {
-  setwd(dirname(rstudioapi::getActiveDocumentContext()$path))
-}
-
-# Load environment variables
-if (file.exists(".env")) {
-  readRenviron(".env")
-}
-API_KEY <- paste('Bearer', Sys.getenv("API_KEY"))
-```
-
-```{r message=FALSE}
 library(httr)
 library(jsonlite)
 library(ghql)
 library(dplyr)
 library(ggplot2)
 library(igraph)
+
+# Load environment variables
+readRenviron(".env")
+API_KEY <- paste('Bearer', Sys.getenv("API_KEY"))
 
 # API URL and headers
 URL <- 'https://api.logic-mill.net/api/v1/graphql/'
@@ -45,11 +23,7 @@ conn <- GraphqlClient$new(
 
 # Similarity metric: cosine, l1, l2
 SIMILARITY_METRIC <- "cosine"
-```
 
-## Define Document Pairs
-
-```{r}
 # Define pairs of documents to compare
 document_pairs <- list(
   list(sourceIndex = "patents", sourceId = "80544619", targetIndex = "patents", targetId = "43862061"),
@@ -57,11 +31,7 @@ document_pairs <- list(
   list(sourceIndex = "patents", sourceId = "43820202", targetIndex = "patents", targetId = "61199404"),
   list(sourceIndex = "patents", sourceId = "61199404", targetIndex = "patents", targetId = "80544619")
 )
-```
 
-## Calculate Pairwise Similarity
-
-```{r}
 # Build GraphQL query
 query <- 'query retrieveDocumentAndSimilarityCalculation($data: [RetrievalSimilarityObject], $metric: similarityMetric, $model: String!) {
   retrieveDocumentAndSimilarityCalculation(
@@ -88,11 +58,7 @@ variables <- list(
 new <- Query$new()$query('link', query)
 res <- conn$exec(new$link, variables = variables) %>%
     fromJSON(flatten = FALSE)
-```
 
-## View Results
-
-```{r}
 # Extract results
 results <- res$data$retrieveDocumentAndSimilarityCalculation
 
@@ -106,18 +72,9 @@ df <- data.frame(
 )
 
 print(df)
-```
 
-## Network Plot
+# --- Network Graph with extended pairs ---
 
-This plot visualizes the pairwise document similarities as a network graph. Each node represents a document (by its ID), and each edge connects two documents, weighted by their similarity score.
-
-### Extended Document Pairs
-
-Let's add more document pairs to create a richer network visualization:
-
-```{r}
-# Add more document pairs
 extended_pairs <- list(
   list(sourceIndex = "patents", sourceId = "80544619", targetIndex = "patents", targetId = "43862061"),
   list(sourceIndex = "patents", sourceId = "29559527", targetIndex = "publications", targetId = "W2531412717"),
@@ -135,21 +92,17 @@ extended_pairs <- list(
   list(sourceIndex = "patents", sourceId = "57146653", targetIndex = "patents", targetId = "43820202")
 )
 
-# Build variables for the extended query
 variables_ext <- list(
   data = extended_pairs,
   metric = SIMILARITY_METRIC,
   model = "patspecter"
 )
 
-# Execute query
 res_ext <- conn$exec(new$link, variables = variables_ext) %>%
     fromJSON(flatten = FALSE)
 
-# Extract results
 results_ext <- res_ext$data$retrieveDocumentAndSimilarityCalculation
 
-# Create data frame
 df_ext <- data.frame(
   sourceId = results_ext$sourceId,
   sourceIndex = results_ext$sourceIndex,
@@ -159,22 +112,13 @@ df_ext <- data.frame(
 )
 
 head(df_ext, 10)
-```
 
-## Network Graph Visualization
+# --- Network Graph Visualization ---
 
-```{r fig.width=10, fig.height=10}
-# Create graph from data frame
 edges <- df_ext[, c("sourceId", "targetId", "score")]
 colnames(edges) <- c("from", "to", "weight")
 
-# Create igraph object
 g <- graph_from_data_frame(edges, directed = FALSE)
-
-# Get unique node types (patent or publication)
-all_nodes <- unique(c(df_ext$sourceId, df_ext$targetId))
-all_indices <- c(df_ext$sourceIndex, df_ext$targetIndex)
-names(all_indices) <- c(df_ext$sourceId, df_ext$targetId)
 
 # Assign node colors based on index type
 node_colors <- sapply(V(g)$name, function(x) {
@@ -182,11 +126,10 @@ node_colors <- sapply(V(g)$name, function(x) {
   else return("#1f77b4")  # Patents
 })
 
-# Plot the network
 set.seed(40)
 layout <- layout_with_fr(g, niter = 500)
 
-plot(g, 
+plot(g,
      vertex.color = node_colors,
      vertex.size = 15,
      vertex.label.cex = 0.6,
@@ -197,21 +140,17 @@ plot(g,
      layout = layout,
      main = "Pairwise Document Similarity Graph (Undirected)")
 
-# Add legend
-legend("bottomleft", 
+legend("bottomleft",
        legend = c("Patents", "Publications"),
        fill = c("#1f77b4", "#ff7f0e"),
        border = NA,
        bty = "n")
-```
 
-## Summary Statistics
+# --- Summary Statistics ---
 
-```{r}
 cat("Network Statistics:\n")
 cat("  Number of nodes:", vcount(g), "\n")
 cat("  Number of edges:", ecount(g), "\n")
 cat("  Average similarity score:", round(mean(df_ext$score), 3), "\n")
 cat("  Max similarity score:", round(max(df_ext$score), 3), "\n")
 cat("  Min similarity score:", round(min(df_ext$score), 3), "\n")
-```

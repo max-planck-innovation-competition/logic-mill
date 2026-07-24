@@ -1,38 +1,16 @@
----
-title: "Own Document Similarity Search API"
-author: "Logic Mill"
-date: "`r Sys.Date()`"
-output:
-  html_document:
-    df_print: paged
----
+# Own Document Similarity Search API
+# Embed a user-supplied document and search for similar documents in the database.
 
-This API embeds a user-provided document (title and abstract) and searches for similar documents in specified indices, returning the top matches and their similarity scores.
-
-## Setup
-
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
-
-# Set working directory
-if (requireNamespace("rstudioapi", quietly = TRUE) && rstudioapi::isAvailable()) {
-  setwd(dirname(rstudioapi::getActiveDocumentContext()$path))
-}
-
-# Load environment variables
-if (file.exists(".env")) {
-  readRenviron(".env")
-}
-API_KEY <- paste('Bearer', Sys.getenv("API_KEY"))
-```
-
-```{r message=FALSE}
 library(httr)
 library(jsonlite)
 library(ghql)
 library(dplyr)
 library(ggplot2)
 library(gridExtra)
+
+# Load environment variables
+readRenviron(".env")
+API_KEY <- paste('Bearer', Sys.getenv("API_KEY"))
 
 # API URL and headers
 URL <- 'https://api.logic-mill.net/api/v1/graphql/'
@@ -45,11 +23,7 @@ conn <- GraphqlClient$new(
 
 # Choose model to encode the document: patspecter, specter2 (only for publications) or paecter (only for patents)
 DEFAULT_MODEL <- "patspecter"
-```
 
-## Define Input Document
-
-```{r}
 # Input document to search for similar documents
 title <- "Attaining Carnot efficiency with quantum and nanoscale heat engines"
 abstract <- "A heat engine operating in the one-shot finite-size regime, where systems composed of a small number of quantum particles interact with hot and cold baths and are restricted to one-shot measurements, delivers fluctuating work. Further, engines with lesser fluctuation produce a lesser amount of deterministic work. Hence, the heat-to-work conversion efficiency stays well below the Carnot efficiency. Here we overcome this limitation and attain Carnot efficiency in the one-shot finite-size regime, where the engines allow the working systems to simultaneously interact with two baths via the semi-local thermal operations and reversibly operate in a one-step cycle. These engines are superior to the ones considered earlier in work extraction efficiency, and, even, are capable of converting heat into work by exclusively utilizing inter-system correlations. We formulate a resource theory for quantum heat engines to prove the results."
@@ -59,11 +33,7 @@ amount_results <- 5
 
 # Document types to search
 document_types <- c("patents", "publications")
-```
 
-## Search for Similar Documents
-
-```{r}
 # Build GraphQL query
 query <- 'query embedDocumentAndSimilaritySearch($data: [EncodeDocumentPart], $indices: [String], $amount: Int, $model: String!) {
   encodeDocumentAndSimilaritySearch(
@@ -98,11 +68,7 @@ variables <- list(
 new <- Query$new()$query('link', query)
 res <- conn$exec(new$link, variables = variables) %>%
     fromJSON(flatten = FALSE)
-```
 
-## View Results
-
-```{r}
 # Extract documents
 documents <- res$data$encodeDocumentAndSimilaritySearch
 
@@ -115,13 +81,9 @@ df <- data.frame(
 )
 
 print(df)
-```
 
-## 2D PCA Scatterplots for Patents and Publications
+# --- 2D PCA Scatterplots ---
 
-The following visualizations show the 2D PCA projections of the document embeddings, separated by document type (patents and publications). Each point represents a document, with its ID shown and its similarity score displayed.
-
-```{r fig.width=12, fig.height=5}
 # Extract embeddings
 embeddings <- do.call(rbind, documents$document$PatspecterEmbedding)
 ids <- documents$id
@@ -141,13 +103,11 @@ plot_df <- data.frame(
   Index = indices
 )
 
-# Create side-by-side plots
-
 # Patents plot
 patents_df <- plot_df[plot_df$Index == "patents", ]
 p1 <- ggplot(patents_df, aes(x = PC1, y = PC2)) +
   geom_point(size = 4, color = "#1f77b4", alpha = 0.8) +
-  geom_text(aes(label = paste0(ID, "\n(", round(Score, 2), ")")), 
+  geom_text(aes(label = paste0(ID, "\n(", round(Score, 2), ")")),
             vjust = -0.5, size = 2.5) +
   theme_minimal() +
   labs(title = "2D PCA of Patents Embeddings",
@@ -157,11 +117,10 @@ p1 <- ggplot(patents_df, aes(x = PC1, y = PC2)) +
 publications_df <- plot_df[plot_df$Index == "publications", ]
 p2 <- ggplot(publications_df, aes(x = PC1, y = PC2)) +
   geom_point(size = 4, color = "#ff7f0e", alpha = 0.8) +
-  geom_text(aes(label = paste0(ID, "\n(", round(Score, 2), ")")), 
+  geom_text(aes(label = paste0(ID, "\n(", round(Score, 2), ")")),
             vjust = -0.5, size = 2.5) +
   theme_minimal() +
   labs(title = "2D PCA of Publications Embeddings",
        x = "PCA Component 1", y = "PCA Component 2")
 
 grid.arrange(p1, p2, ncol = 2)
-```

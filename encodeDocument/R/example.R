@@ -1,36 +1,14 @@
----
-title: "Encode Document API"
-author: "Logic Mill"
-date: "`r Sys.Date()`"
-output:
-  html_document:
-    df_print: paged
----
+# Encode Document API
+# Generate an embedding for a single user-supplied document.
 
-This API converts a single document (with title and abstract) into a vector embedding using a selected model (e.g., patspecter). The embedding can be used for downstream tasks such as similarity search or clustering.
-
-## Setup
-
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
-
-# Set working directory
-if (requireNamespace("rstudioapi", quietly = TRUE) && rstudioapi::isAvailable()) {
-  setwd(dirname(rstudioapi::getActiveDocumentContext()$path))
-}
-
-# Load environment variables
-if (file.exists(".env")) {
-  readRenviron(".env")
-}
-API_KEY <- paste('Bearer', Sys.getenv("API_KEY"))
-```
-
-```{r message=FALSE}
 library(httr)
 library(jsonlite)
 library(ghql)
 library(dplyr)
+
+# Load environment variables
+readRenviron(".env")
+API_KEY <- paste('Bearer', Sys.getenv("API_KEY"))
 
 # API URL and headers
 URL <- 'https://api.logic-mill.net/api/v1/graphql/'
@@ -43,13 +21,7 @@ conn <- GraphqlClient$new(
 
 # Choose model to encode the document: patspecter, specter2 or paecter
 DEFAULT_MODEL <- "patspecter"
-```
 
-## Encode a Single Document
-
-We use the `encodeDocument` endpoint to convert a document (title and abstract) into a numerical embedding.
-
-```{r}
 # Build GraphQL query
 query <- 'query encodeDocument($data: EncodeObject, $model: String!) {
   encodeDocument(data: $data, model: $model)
@@ -78,25 +50,16 @@ new <- Query$new()$query('link', query)
 
 res <- conn$exec(new$link, variables = variables) %>%
     fromJSON(flatten = FALSE)
-```
 
-## View Results
-
-```{r}
 # Get the embedding
 embedding <- res$data$encodeDocument
 
 # Print first 10 dimensions of the embedding
 cat("Encoded Document (first 10 dimensions):\n", embedding[1:10], "\n")
-cat("Embedding length:", length(embedding))
-```
+cat("Embedding length:", length(embedding), "\n")
 
-## Encode Another Document
+# --- Encode another document ---
 
-Here is another example using a different document:
-
-```{r}
-# Another document to encode
 variables2 <- list(
   model = DEFAULT_MODEL,
   data = list(
@@ -114,4 +77,3 @@ res2 <- conn$exec(new$link, variables = variables2) %>%
 
 # Print first 10 dimensions
 cat("Encoded Document (first 10 dimensions):\n", res2$data$encodeDocument[1:10], "\n")
-```

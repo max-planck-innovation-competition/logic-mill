@@ -1,37 +1,15 @@
----
-title: "Retrieve Documents by ID API"
-author: "Logic Mill"
-date: "`r Sys.Date()`"
-output:
-  html_document:
-    df_print: paged
----
+# Retrieve Documents by ID API
+# Retrieve document metadata and embeddings by ID, with clustering example.
 
-This API retrieves documents (patents or publications) by their unique IDs and returns their metadata and embeddings. Useful for fetching and analyzing specific documents.
-
-## Setup
-
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
-
-# Set working directory
-if (requireNamespace("rstudioapi", quietly = TRUE) && rstudioapi::isAvailable()) {
-  setwd(dirname(rstudioapi::getActiveDocumentContext()$path))
-}
-
-# Load environment variables
-if (file.exists(".env")) {
-  readRenviron(".env")
-}
-API_KEY <- paste('Bearer', Sys.getenv("API_KEY"))
-```
-
-```{r message=FALSE}
 library(httr)
 library(jsonlite)
 library(ghql)
 library(dplyr)
 library(ggplot2)
+
+# Load environment variables
+readRenviron(".env")
+API_KEY <- paste('Bearer', Sys.getenv("API_KEY"))
 
 # API URL and headers
 URL <- 'https://api.logic-mill.net/api/v1/graphql/'
@@ -41,11 +19,7 @@ conn <- GraphqlClient$new(
   url = URL,
   headers = list(Authorization = API_KEY)
 )
-```
 
-## Retrieve Documents by ID
-
-```{r}
 # Build GraphQL query
 query <- 'query Documents($data: [DatabaseSearchDocument]) {
   Documents(data: $data) {
@@ -93,11 +67,7 @@ variables <- fromJSON('{
 new <- Query$new()$query('link', query)
 res <- conn$exec(new$link, variables = variables) %>%
     fromJSON(flatten = FALSE)
-```
 
-## View Results
-
-```{r}
 # Extract documents
 docs <- res$data$Documents
 
@@ -111,13 +81,9 @@ doc_summary <- data.frame(
 )
 
 print(doc_summary)
-```
 
-## Multiple Document Retrieval
+# --- Multiple Document Retrieval with Clustering ---
 
-The following example retrieves documents from three different subject fields and conducts clustering based on the retrieved embedding.
-
-```{r}
 # List of Open Alex IDs from different subject areas
 publications <- c(
   "W4205325213", "W2163605009", "W4200466434",    # Publications on AI
@@ -137,17 +103,9 @@ res_multi <- conn$exec(new$link, variables = variables_multi) %>%
 # Extract documents
 encoded_documents <- res_multi$data$Documents
 cat("Retrieved", nrow(encoded_documents), "documents\n")
-```
 
-## Clustering
-
-We can use the retrieved embeddings to cluster documents. The documents are clustered into their subject areas.
-
-```{r}
-# Extract embeddings from documents
+# Extract embeddings and cluster
 embeddings <- encoded_documents$PatspecterEmbedding
-
-# Convert to matrix
 X <- do.call(rbind, embeddings)
 
 # Perform K-means clustering into 3 clusters
@@ -159,18 +117,11 @@ cat("Cluster Assignments:\n")
 for (i in seq_along(encoded_documents$id)) {
   cat(sprintf("ID: %s - Cluster: %d\n", encoded_documents$id[i], kmeans_result$cluster[i]))
 }
-```
 
-## Dimensionality Reduction and Visualization of Clusters
-
-To better understand the clustering results, we can project the high-dimensional embeddings into two dimensions using PCA and plot them. Each point represents a document, colored by its cluster assignment.
-
-```{r fig.width=5, fig.height=4}
-# Perform PCA for dimensionality reduction
+# PCA visualization
 pca_result <- prcomp(X, center = TRUE, scale. = FALSE)
 X_2d <- pca_result$x[, 1:2]
 
-# Create data frame for plotting
 plot_df <- data.frame(
   PC1 = X_2d[, 1],
   PC2 = X_2d[, 2],
@@ -178,7 +129,6 @@ plot_df <- data.frame(
   ID = encoded_documents$id
 )
 
-# Create scatter plot
 ggplot(plot_df, aes(x = PC1, y = PC2, color = Cluster)) +
   geom_point(size = 4) +
   geom_text(aes(label = ID), hjust = -0.1, vjust = 0, size = 3, alpha = 0.7) +
@@ -188,12 +138,8 @@ ggplot(plot_df, aes(x = PC1, y = PC2, color = Cluster)) +
        x = "PCA Component 1",
        y = "PCA Component 2") +
   theme(legend.position = "right")
-```
 
-## Subject Area Labels
-
-```{r}
-# Add subject area labels
+# Subject area labels
 subject_areas <- c(rep("AI", 3), rep("History", 3), rep("Psychology", 3))
 
 cat("\nDocument Subject Areas vs Cluster Assignments:\n")
@@ -203,4 +149,3 @@ comparison_df <- data.frame(
   Cluster = kmeans_result$cluster
 )
 print(comparison_df)
-```

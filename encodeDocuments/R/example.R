@@ -1,37 +1,15 @@
----
-title: "Encode Multiple Documents API"
-author: "Logic Mill"
-date: "`r Sys.Date()`"
-output:
-  html_document:
-    df_print: paged
----
+# Encode Multiple Documents API
+# Batch encode several documents and compute similarities.
 
-This API encodes multiple documents at once, returning an embedding for each. Useful for batch processing and subsequent similarity or clustering analysis.
-
-## Setup
-
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
-
-# Set working directory
-if (requireNamespace("rstudioapi", quietly = TRUE) && rstudioapi::isAvailable()) {
-  setwd(dirname(rstudioapi::getActiveDocumentContext()$path))
-}
-
-# Load environment variables
-if (file.exists(".env")) {
-  readRenviron(".env")
-}
-API_KEY <- paste('Bearer', Sys.getenv("API_KEY"))
-```
-
-```{r message=FALSE}
 library(httr)
 library(jsonlite)
 library(ghql)
 library(dplyr)
 library(ggplot2)
+
+# Load environment variables
+readRenviron(".env")
+API_KEY <- paste('Bearer', Sys.getenv("API_KEY"))
 
 # API URL and headers
 URL <- 'https://api.logic-mill.net/api/v1/graphql/'
@@ -44,11 +22,9 @@ conn <- GraphqlClient$new(
 
 # Choose model to encode the document: patspecter, specter2 or paecter
 DEFAULT_MODEL <- "patspecter"
-```
 
-## Encode Two Documents
+# --- Encode Two Documents ---
 
-```{r}
 # Build GraphQL query
 query <- 'query encodeDocuments($data: [EncodeObject], $model: String!) {
   encodeDocuments(data: $data, model: $model) {
@@ -94,34 +70,25 @@ variables <- fromJSON('{
 new <- Query$new()$query('link', query)
 res <- conn$exec(new$link, variables = variables) %>%
     fromJSON(flatten = FALSE)
-```
 
-## View Results
-
-```{r}
 # Extract encoded documents
 encoded_documents <- res$data$encodeDocuments
 
 cat(paste0("Document ", encoded_documents$id[1], " (first 10 dimensions):\n"), encoded_documents$embedding[[1]][1:10],"\n")
 cat(paste0("Document ", encoded_documents$id[2], " (first 10 dimensions):\n"), encoded_documents$embedding[[2]][1:10],"\n")
-```
 
-## Encode Multiple Documents (Five Documents)
+# --- Encode Five Documents ---
 
-Logic Mill also allows us to embed more than two documents. The following example encodes five documents about neural networks.
-
-```{r}
-# Define documents to embed
 documents <- list(
-  list(id = "10.1007/s41060-024-00546-5", title = "Neural lasso", 
+  list(id = "10.1007/s41060-024-00546-5", title = "Neural lasso",
        abstract = "In recent years, there has been a growing interest in establishing bridges between statistics and neural networks. This article focuses on the adaptation of the widely used lasso algorithm within the context of neural networks. To accomplish this, the network configuration is first designed. After that, in order to estimate the network weights, three optimization algorithms are considered. The first one, called standard neural lasso, employs the conventional procedure for training neural networks. The second optimization algorithm, termed restricted neural lasso, mimics traditional lasso to establish a connection between statistics and machine learning. Finally, a third optimization algorithm, called voting neural lasso was developed."),
-  list(id = "10.1007/s00521-025-11180-y", title = "Virtual neural networks", 
+  list(id = "10.1007/s00521-025-11180-y", title = "Virtual neural networks",
        abstract = "A new concept, termed virtual neural networks, is introduced, where the count of trainable parameters is kept constant, and scalability is attained purely through computational resources. This concept is an abstract framework that can be realized using any standard convolutional neural network. It merges siamese neural networks with a deep ensemble technique by generating numerous virtual models that share weights derived from a small set of physical models."),
-  list(id = "10.1007/s44258-024-00042-2", title = "Towards NeuroAI", 
+  list(id = "10.1007/s44258-024-00042-2", title = "Towards NeuroAI",
        abstract = "Throughout history, the development of artificial intelligence, especially artificial neural networks, has been continuously influenced by a deeper understanding of the brain. This influence includes the development of the neocognitron, considered a precursor to convolutional neural networks. The emerging field of NeuroAI posits that leveraging neuroscience knowledge could significantly advance AI by imbuing networks with enhanced capabilities."),
-  list(id = "10.1007/s10851-024-01171-4", title = "Riesz Networks", 
+  list(id = "10.1007/s10851-024-01171-4", title = "Riesz Networks",
        abstract = "Scale invariance of an algorithm refers to its ability to treat objects equally independently of their size. For neural networks, scale invariance is typically achieved by data augmentation. However, when presented with a scale far outside the range covered by the training set, neural networks may fail to generalize. Here, we introduce the Riesz network, a novel scale-invariant neural network."),
-  list(id = "10.1038/s41377-024-01590-3", title = "Optical neural networks", 
+  list(id = "10.1038/s41377-024-01590-3", title = "Optical neural networks",
        abstract = "Artificial intelligence has prevailed in all trades and professions due to the assistance of big data resources, advanced algorithms, and high-performance electronic hardware. However, conventional computing hardware is inefficient at implementing complex tasks. In recent years, optical neural networks (ONNs) have made a range of research progress in optical computing due to advantages such as sub-nanosecond latency, low heat dissipation, and high parallelism.")
 )
 
@@ -146,13 +113,9 @@ res_multi <- conn$exec(new$link, variables = variables_multi) %>%
 # Extract results
 encoded_docs <- res_multi$data$encodeDocuments
 cat("Encoded", length(encoded_docs$id), "documents\n")
-```
 
-## Similarity Computation
+# --- Similarity Computation ---
 
-We can use the embeddings to compute a similarity metric between the documents. The following code computes the cosine similarity.
-
-```{r}
 # Extract embeddings as a matrix
 embedding_matrix <- do.call(rbind, encoded_docs$embedding)
 
@@ -171,18 +134,12 @@ colnames(sim_matrix) <- sapply(documents, function(x) x$title)
 
 cat("Cosine Similarity Matrix:\n")
 print(round(sim_matrix, 3))
-```
 
-## Heatmap Visualization
+# --- Heatmap Visualization ---
 
-To visualize the similarity between the document embeddings, we can plot the cosine similarity matrix as a heatmap. This provides an intuitive overview of how closely related the documents are to each other based on their embeddings.
-
-```{r fig.width=10, fig.height=8}
-# Convert to long format for ggplot2
 sim_df <- as.data.frame(as.table(sim_matrix))
 names(sim_df) <- c("Doc1", "Doc2", "Similarity")
 
-# Create heatmap
 ggplot(sim_df, aes(x = Doc1, y = Doc2, fill = Similarity)) +
   geom_tile() +
   geom_text(aes(label = round(Similarity, 2)), color = "white", size = 3) +
@@ -192,4 +149,3 @@ ggplot(sim_df, aes(x = Doc1, y = Doc2, fill = Similarity)) +
         axis.text.y = element_text(size = 8)) +
   labs(title = "Cosine Similarity Heatmap",
        x = "", y = "")
-```
