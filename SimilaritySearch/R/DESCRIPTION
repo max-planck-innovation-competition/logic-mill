@@ -1,0 +1,8 @@
+Type: project
+Depends:
+    httr,
+    jsonlite,
+    ghql,
+    ggplot2,
+    wordcloud,
+    tm

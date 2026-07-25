@@ -1,0 +1,5 @@
+Type: project
+Depends:
+    httr,
+    jsonlite,
+    ghql

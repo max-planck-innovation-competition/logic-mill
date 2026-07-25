@@ -1,0 +1,7 @@
+Type: project
+Depends:
+    httr,
+    jsonlite,
+    ghql,
+    ggplot2,
+    igraph
