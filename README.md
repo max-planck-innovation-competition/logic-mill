@@ -1,4 +1,4 @@
-![LM Logo](img/lm-logo.png)
+![LM Logo](.github/lm-logo.png)
 
 # Logic Mill - A Knowledge Navigation System
 
